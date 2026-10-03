@@ -391,8 +391,11 @@ const SRC={main:document.currentScript?document.currentScript.textContent:'',app
   lib:(()=>{const l=document.getElementById('libLeaflet');return l?(l.src?{src:l.src}:{code:l.textContent}):null})(),
   styles:[...document.querySelectorAll('style')].map(x=>x.textContent),links:[...document.querySelectorAll('link[rel=stylesheet],link[rel=preconnect]')].map(x=>x.outerHTML),
   title:document.title,topo:(document.getElementById('libTopo')||{}).textContent||'',world:(document.getElementById('worldData')||{}).textContent||''};
-const SHARED=(()=>{const el=document.getElementById('sharedTrip');if(!el)return null;try{const o=JSON.parse(el.textContent);return o&&o.trip&&Array.isArray(o.trip.items)?o:null}catch(e){return null}})();
-let KEY=SHARED?'tripPlanner.shared.'+SHARED.stamp:'tripPlanner.v2';
+const FB_DB='https://gogotrip-ef950-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FB_ON=/^https:\/\/[a-z0-9-]+\.(firebaseio\.com|[a-z0-9-]+\.firebasedatabase\.app)$/.test(FB_DB)&&!(window.claude&&window.claude.use);
+const COLLAB=(()=>{const m=location.hash.match(/^#e-([A-Za-z0-9]{20,40})$/);return m&&FB_ON?m[1]:null})();
+const SHARED=COLLAB?null:(()=>{const el=document.getElementById('sharedTrip');if(!el)return null;try{const o=JSON.parse(el.textContent);return o&&o.trip&&Array.isArray(o.trip.items)?o:null}catch(e){return null}})();
+let KEY=COLLAB?'tripPlanner.collab.'+COLLAB:(SHARED?'tripPlanner.shared.'+SHARED.stamp:'tripPlanner.v2');
 const CATS={
   move:{label:'교통',v:'--c-move'}, stay:{label:'숙소',v:'--c-stay'}, food:{label:'음식점',v:'--c-food'}, cafe:{label:'카페·디저트',v:'--c-cafe'},
   see:{label:'관광지',v:'--c-see'}, tour:{label:'체험·투어',v:'--c-tour'}, shop:{label:'쇼핑',v:'--c-shop'}, night:{label:'야경·바',v:'--c-night'},
@@ -475,7 +478,8 @@ function migrate(t){
 let trip=null;
 try{trip=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 if(!trip&&SHARED)trip=JSON.parse(JSON.stringify(SHARED.trip));
-if(!trip&&!SHARED){try{const old=JSON.parse(localStorage.getItem('tripPlanner.v1'));if(old&&Array.isArray(old.items)&&!old.isSample)trip=old}catch(e){}}
+if(!trip&&COLLAB)trip={title:'불러오는 중…',start:'',end:'',people:1,budget:0,currency:'KRW',rates:{},isSample:false,cities:[],items:[],todos:[],_loading:true};
+if(!trip&&!SHARED&&!COLLAB){try{const old=JSON.parse(localStorage.getItem('tripPlanner.v1'));if(old&&Array.isArray(old.items)&&!old.isSample)trip=old}catch(e){}}
 if(!trip||!Array.isArray(trip.items)||(trip.isSample&&!(trip.cities&&trip.items.some(i=>i.tix))))trip=sample();
 migrate(trip);
 let view='route';try{view=localStorage.getItem(KEY+'.view')||'route'}catch(e){}
@@ -483,10 +487,58 @@ if(!['route','todo','timeline','list','places','budget','recs'].includes(view))v
 let mapCity='all',mapDay='all',picking=null,selId=null,sampleFn=null,recs=[],recCtl=null;
 const DEVICE=uid();let dbApi=null,uidV=null,isOwnerV=false,assetsFn=null,cloudOn=false,pushT=null,pushing=Promise.resolve();
 function localSave(){try{localStorage.setItem(KEY,JSON.stringify(trip))}catch(e){}}
-function save(){trip.updatedAt=Date.now();localSave();if(dbApi&&uidV&&!SHARED){clearTimeout(pushT);pushT=setTimeout(pushNow,700)}}
+function save(){trip.updatedAt=Date.now();localSave();if(COLLAB&&!trip._loading){clearTimeout(fbT);fbT=setTimeout(fbPush,600);fbState='saving';renderCloud()}if(dbApi&&uidV&&!SHARED){clearTimeout(pushT);pushT=setTimeout(pushNow,700)}}
 function pushNow(){if(!dbApi||!uidV)return;const body={trip:JSON.parse(JSON.stringify(trip)),updatedAt:trip.updatedAt||Date.now(),device:DEVICE};
   pushing=pushing.then(()=>dbApi.doc('data/users/'+uidV+'/trip').set(body)).then(()=>{cloudOn=true;renderCloud()}).catch(e=>{cloudOn=false;renderCloud();if(e&&e.code==='invalid_argument')toast('일정이 너무 커서 계정에 저장하지 못했어요. 메모를 줄여 주세요')})}
-function renderCloud(){const el=$('#cloudPill');if(!el)return;if(SHARED){el.hidden=true;return}el.hidden=false;
+/* 같이 편집 (Firebase Realtime Database, REST) */
+let fbT=null,fbLast=null,fbState='',fbChain=Promise.resolve(),fbDeferred=false;
+const fbUrl=()=>`${FB_DB}/trips/${COLLAB}.json`;
+const asObj=a=>Object.fromEntries((a||[]).filter(x=>x&&x.id).map(x=>[x.id,JSON.parse(JSON.stringify(x))]));
+function toFB(t){const meta={};['title','start','end','people','budget','currency','rates','updatedAt'].forEach(k=>{if(t[k]!==undefined)meta[k]=JSON.parse(JSON.stringify(t[k]))});
+  return {meta,items:asObj(t.items),todos:asObj(t.todos),cities:asObj(t.cities),dayNotes:JSON.parse(JSON.stringify(t.dayNotes||{}))}}
+function fromFB(d){d=d||{};const m=d.meta||{};const t={title:'여행',start:'',end:'',people:1,budget:0,currency:'KRW',rates:{},...m,items:Object.values(d.items||{}),todos:Object.values(d.todos||{}),cities:Object.values(d.cities||{}),dayNotes:d.dayNotes||{},isSample:false};
+  t.items.forEach(i=>{if(i.tix){i.tix.links=i.tix.links||[];i.tix.files=i.tix.files||[]}if(!i.det)i.det={}});return migrate(t)}
+function fbKeys(fb){const o={meta:JSON.stringify(fb.meta||{}),dayNotes:JSON.stringify(fb.dayNotes||{})};['items','todos','cities'].forEach(c=>Object.entries(fb[c]||{}).forEach(([id,v])=>o[c+'/'+id]=JSON.stringify(v)));return o}
+function fbFromKeys(k){const o={meta:{},items:{},todos:{},cities:{},dayNotes:{}};Object.entries(k).forEach(([p,v])=>{if(v===undefined)return;const val=JSON.parse(v);if(p==='meta'||p==='dayNotes')o[p]=val;else{const [c,id]=p.split('/');o[c][id]=val}});return o}
+function fbPush(){fbChain=fbChain.then(async()=>{
+  if(!fbLast)return;const cur=fbKeys(toFB(trip)),patch={};
+  Object.keys(cur).forEach(k=>{if(cur[k]!==fbLast[k])patch[k]=JSON.parse(cur[k])});Object.keys(fbLast).forEach(k=>{if(!(k in cur))patch[k]=null});
+  if(!Object.keys(patch).length){fbState='ok';renderCloud();return}
+  try{const r=await fetch(fbUrl(),{method:'PATCH',body:JSON.stringify(patch)});if(!r.ok)throw 0;Object.keys(patch).forEach(k=>{if(patch[k]===null)delete fbLast[k];else fbLast[k]=cur[k]});fbState='ok'}
+  catch(e){fbState='off'}
+  renderCloud()})}
+const typing=()=>{const a=document.activeElement;return !!(a&&(a.matches('[data-note],[data-daynote],#tdText,#tdE')||(!$('#overlay').hidden&&a.closest('#overlay'))))};
+async function fbPull(){
+  try{const r=await fetch(fbUrl());if(!r.ok)throw 0;const d=await r.json();
+    if(!d){if(trip._loading){trip={...blank(),title:'새 여행'};}fbLast={};delete trip._loading;fbPush();return}
+    const rem=fbKeys(d),wasLoading=trip._loading;
+    if(!fbLast||wasLoading){trip=fromFB(d);fbLast=rem;localSave();fbState='ok';render();return}
+    const loc=fbKeys(toFB(trip)),merged={};
+    new Set([...Object.keys(rem),...Object.keys(loc),...Object.keys(fbLast)]).forEach(k=>{merged[k]=(loc[k]!==fbLast[k])?loc[k]:rem[k]});
+    const before=JSON.stringify(loc);trip=fromFB(fbFromKeys(merged));fbLast=rem;localSave();
+    if(JSON.stringify(fbKeys(toFB(trip)))!==before){if(typing())fbDeferred=true;else render(false)}
+    if(fbState==='off')fbState='ok';renderCloud();
+    if(Object.keys(merged).some(k=>merged[k]!==rem[k]))fbPush();
+  }catch(e){fbState='off';renderCloud()}
+}
+function initCollab(){
+  if(!COLLAB)return;fbState='saving';renderCloud();fbPull();
+  let pt=null;const sched=ms=>{if(pt)return;pt=setTimeout(()=>{pt=null;fbPull()},ms)};
+  try{const es=new EventSource(fbUrl());es.addEventListener('put',()=>sched(250));es.addEventListener('patch',()=>sched(250));es.onerror=()=>sched(2500)}catch(e){}
+  setInterval(()=>{if(!document.hidden)sched(0)},20000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sched(0)});
+  window.addEventListener('online',()=>{fbPull()});
+  document.addEventListener('focusout',()=>{if(fbDeferred){setTimeout(()=>{if(!typing()&&fbDeferred){fbDeferred=false;render(false)}},50)}});
+}
+async function startCollab(){
+  const id=Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'[b%57]).join('');
+  const t=JSON.parse(JSON.stringify(trip));delete t.isSample;t.items.forEach(i=>{if(i.tix)i.tix.files=[]});
+  const r=await fetch(`${FB_DB}/trips/${id}.json`,{method:'PUT',body:JSON.stringify(toFB(t))});if(!r.ok)throw new Error('put');
+  try{localStorage.setItem('tripPlanner.collab.'+id,JSON.stringify(t))}catch(e){}
+  location.hash='e-'+id;location.reload();
+}
+const collabLink=()=>location.origin+location.pathname+'#e-'+COLLAB;
+function renderCloud(){const el=$('#cloudPill');if(!el)return;
+  if(COLLAB){el.hidden=false;el.className='cloud'+(fbState==='ok'?' on':'');el.textContent=fbState==='ok'?'같이 편집 중 · 모두에게 저장됨':fbState==='saving'?'같이 편집 중 · 저장하는 중…':'연결이 끊겼어요 · 이 기기에 저장해 두고 다시 연결되면 올려요';return}if(SHARED){el.hidden=true;return}el.hidden=false;
   if(dbApi&&cloudOn){el.className='cloud on';el.textContent='계정에 저장 · 휴대폰에서도 보여요'}else if(window.claude&&window.claude.use){el.className='cloud';el.textContent='계정 연결 중…'}else{el.className='cloud';el.textContent='이 기기에만 저장'}}
 function applyRemote(d){try{trip=migrate(JSON.parse(JSON.stringify(d.trip)));trip.updatedAt=d.updatedAt;localSave();render(false)}catch(e){}}
 async function initCloud(){
@@ -1097,6 +1149,10 @@ function openShare(){
     ${dbApi&&isOwnerV?`<hr class="sep"><b>클로드 링크로 보여주기</b><span class="hint">이 페이지 링크를 받은 사람이 (클로드에 로그인해서) 열면 찬섭님 일정이 보여요. 아이폰에서도 돼요. 페이지 오른쪽 위 공유 메뉴에서 공유를 켜 주셔야 해요.</span>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="shHide" checked> 티켓 사진 · 예약번호는 빼고 보여주기</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" id="shPub">지금 일정을 링크에 공개</button><button type="button" class="btn" id="shUnpub">공개 끄기</button><span class="st" id="shPubSt"></span></div><hr class="sep"><b>파일로 보내기 (카톡 등)</b>`:''}
+    ${FB_ON?(COLLAB?`<hr class="sep"><b>같이 편집하는 링크</b><span class="hint">이 링크를 받은 사람은 누구나 보고 고칠 수 있어요. 고친 내용은 바로 모두에게 보여요. 같이 갈 사람에게만 보내 주세요.</span>
+      <div class="loc-row"><input class="inp" id="clLink" readonly value="${esc(collabLink())}"><button type="button" class="btn small primary" id="clCopy">복사</button></div><hr class="sep"><b>파일로 보내기</b>`
+      :`<hr class="sep"><b>같이 편집하기</b><span class="hint">지금 일정을 온라인에 올리고 비밀 링크를 만들어요. 링크를 연 사람 누구나 같이 추가·수정할 수 있고, 휴대폰·노트북 어디서 열어도 같은 일정이 보여요. 티켓 사진은 올라가지 않아요.</span>
+      <div><button type="button" class="btn primary" id="clStart">같이 편집 링크 만들기</button> <span class="st" id="clSt"></span></div><hr class="sep"><b>파일로 보내기</b>`):''}
     <div class="todo" style="margin:0"><b>받는 사람에게 알려 주세요</b><ul style="font-size:13.5px;color:var(--muted)">
       <li>카톡에서 바로 열면 지도나 버튼이 제대로 안 될 수 있어요. 파일을 저장한 뒤 크롬이나 사파리로 열어 주세요.</li>
       <li>받은 사람이 고친 내용은 그 사람 기기에만 저장되고, 찬섭님 일정은 바뀌지 않아요.</li>
@@ -1104,6 +1160,8 @@ function openShare(){
   </div>`;
   ov.hidden=false;
   $('#shClose').onclick=closeForm;
+  if($('#clCopy'))$('#clCopy').onclick=()=>{const v=$('#clLink').value;try{navigator.clipboard.writeText(v).then(()=>toast('링크를 복사했어요. 카톡에 붙여넣어 보내세요'),()=>{$('#clLink').select();toast('선택했어요. 복사해서 보내세요')})}catch(e){$('#clLink').select()}};
+  if($('#clStart'))$('#clStart').onclick=async()=>{$('#clStart').disabled=true;$('#clSt').textContent='올리는 중…';try{await startCollab()}catch(e){$('#clSt').textContent='올리지 못했어요. 인터넷 연결을 확인해 주세요.';$('#clStart').disabled=false}};
   if($('#shPub')){$('#shPub').onclick=async()=>{const st=$('#shPubSt');st.textContent='공개하는 중…';
       const t=JSON.parse(JSON.stringify(trip));if($('#shHide').checked)t.items.forEach(i=>{if(i.tix)i.tix={...i.tix,files:[]};if(i.det)delete i.det.resno});
       try{await dbApi.doc('shared/trip').set({trip:t,from:$('#shFrom').value.trim()||'',updatedAt:Date.now()});st.textContent='공개했어요. 일정을 고친 뒤에는 다시 눌러 주세요.';st.className='st ok'}catch(e){st.textContent='공개하지 못했어요.'}};
@@ -1531,6 +1589,7 @@ if(window.claude&&typeof window.claude.use==='function'){
   window.claude.use('downloads').then(d=>{if(d)downloadsFn=d}).catch(()=>{});
 }
 initCloud();
+initCollab();
 {
 }
 })();
