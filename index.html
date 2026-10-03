@@ -180,6 +180,18 @@ h1{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);line-height:1.2;m
 .todo li{display:flex;justify-content:space-between;gap:10px;font-size:14px;align-items:center}
 .todo ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .stayline{font-size:12px;color:var(--muted);font-weight:500}
+.nights{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px}
+.night{border:1px solid var(--line);border-left:4px solid var(--c);border-radius:9px;padding:7px 9px;background:var(--surface);display:flex;flex-direction:column;gap:2px;min-width:0;font-size:12.5px}
+.night b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.night.gap{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 7%,var(--surface))}
+.night.gap button{align-self:flex-start;border:1px solid var(--line);background:var(--surface);border-radius:6px;font-size:11.5px;font-weight:700;padding:1px 7px;margin-top:2px}
+.stay{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--c-stay);border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px}
+.stay h3{margin:0;font-size:17px}
+.stay .inout{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13.5px}
+.stay .inout span b{font-family:var(--f-mono)}
+.stay .cost{text-align:right;font-family:var(--f-mono);font-weight:700;white-space:nowrap}
+.stay .cost small{display:block;font-weight:500;color:var(--muted);font-size:11.5px}
+.stay .full{grid-column:1/-1;display:flex;flex-direction:column;gap:4px}
 .td-add{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px}
 @media (max-width:560px){.td-add{grid-template-columns:1fr 1fr}.td-add input[type=text],.td-add button{grid-column:1/-1}}
 .td-add input,.td-add select{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;min-width:0}
@@ -357,6 +369,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
       <nav class="tabs" role="tablist">
         <button class="tab" role="tab" data-v="route">여행 경로</button>
         <button class="tab" role="tab" data-v="todo" id="tabTodo">할 일</button>
+        <button class="tab" role="tab" data-v="stays">숙소</button>
         <button class="tab" role="tab" data-v="timeline">타임라인</button>
         <button class="tab" role="tab" data-v="list">일정표 · 교통</button>
         <button class="tab" role="tab" data-v="places">장소 모음</button>
@@ -365,6 +378,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
       </nav>
       <section id="vRoute" hidden></section>
       <section id="vTodo" hidden></section>
+      <section id="vStays" hidden></section>
       <section id="vTimeline" hidden></section>
       <section id="vList" hidden></section>
       <section id="vPlaces" hidden></section>
@@ -483,7 +497,7 @@ if(!trip&&!SHARED&&!COLLAB){try{const old=JSON.parse(localStorage.getItem('tripP
 if(!trip||!Array.isArray(trip.items)||(trip.isSample&&!(trip.cities&&trip.items.some(i=>i.tix))))trip=sample();
 migrate(trip);
 let view='route';try{view=localStorage.getItem(KEY+'.view')||'route'}catch(e){}
-if(!['route','todo','timeline','list','places','budget','recs'].includes(view))view='route';
+if(!['route','todo','stays','timeline','list','places','budget','recs'].includes(view))view='route';
 let mapCity='all',mapDay='all',picking=null,selId=null,sampleFn=null,recs=[],recCtl=null;
 const DEVICE=uid();let dbApi=null,uidV=null,isOwnerV=false,assetsFn=null,cloudOn=false,pushT=null,pushing=Promise.resolve();
 function localSave(){try{localStorage.setItem(KEY,JSON.stringify(trip))}catch(e){}}
@@ -1189,6 +1203,29 @@ async function importSharedFiles(){
   for(const [id,f] of Object.entries(SHARED.files)){try{if(await fget(id))continue;const bin=atob(f.data),u=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u[k]=bin.charCodeAt(k);await fput(id,{blob:new Blob([u],{type:f.type}),name:f.name,type:f.type});n++}catch(e){}}
 }
 
+/* stays */
+function renderStays(){
+  const el=$('#vStays'),all=trip.items.filter(i=>i.cat==='stay'),st=sorted(all.filter(i=>i.date)),saved=all.filter(i=>!i.date);
+  const nightsList=[];if(trip.start&&trip.end&&trip.start<trip.end){let d=parseD(trip.start);const e=parseD(trip.end);let g=0;while(d<e&&g++<90){nightsList.push(iso(d));d.setDate(d.getDate()+1)}}
+  const gaps=nightsList.filter(d=>!staysOn(d).length);
+  const totalKRW=st.reduce((s,i)=>s+krw(i.cost,i.cur),0),nightsN=nightsList.length-gaps.length;
+  let h=`<div class="panel" style="gap:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px"><h3>숙박 ${nightsList.length}박</h3><span class="mono">${won(totalKRW)}${nightsN?` · 1박 평균 ${won(totalKRW/nightsN)}`:''}</span></div>
+    ${gaps.length?`<span class="st" style="color:var(--warn)">숙소를 아직 안 정한 밤이 ${gaps.length}개 있어요.</span>`:(nightsList.length?`<span class="st ok">모든 밤의 숙소가 정해졌어요.</span>`:'<span class="hint">여행 정보에서 출발일과 돌아오는 날을 넣으면 밤마다 숙소를 확인해 줘요.</span>')}
+    ${nightsList.length?`<div class="nights">${nightsList.map(d=>{const s=staysOn(d);return s.length?`<div class="night" style="--c:var(--c-stay)"><span class="hint">${fmtD(d)} 밤</span><b>${esc(s[0].place.replace(/ 체크인$/,''))}</b>${s.length>1?'<span class="hint" style="color:var(--warn)">숙소가 겹쳐요</span>':''}</div>`:`<div class="night gap"><span class="hint">${fmtD(d)} 밤</span><b>숙소 없음</b><button type="button" data-addstay="${d}">＋ 추가</button></div>`}).join('')}</div>`:''}
+    <div><button type="button" class="btn primary small" data-addstay="${gaps[0]||trip.start||''}">＋ 숙소 추가</button></div></div>`;
+  if(!st.length&&!saved.length)h+=`<div class="day" style="margin-top:12px"><div class="empty">아직 숙소가 없어요. <b>＋ 숙소 추가</b>로 체크인·체크아웃 날짜와 예약 정보를 넣어 보세요.</div></div>`;
+  h+='<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">'+st.map(i=>{
+    const d=i.det||{},n=d.outDate?Math.max(0,Math.round((parseD(d.outDate)-parseD(i.date))/864e5)):0,c=cityOf(i),cost=krw(i.cost,i.cur);
+    return `<article class="stay"><div style="min-width:0;display:flex;flex-direction:column;gap:4px"><h3>${esc(i.place.replace(/ 체크인$/,''))} ${badges(i)}</h3>
+      <div class="hint">${c?esc(c.name)+' · ':''}${n?n+'박':'체크아웃 날짜를 넣어 주세요'}${d.vendor?' · '+esc(d.vendor):''}${d.room?' · '+esc(d.room):''}</div>
+      <div class="inout"><span>체크인 <b>${fmtD(i.date).split(' ')[0]} ${esc(i.start||'')}</b></span><span>체크아웃 <b>${d.outDate?fmtD(d.outDate).split(' ')[0]+' '+esc(d.outTime||''):'—'}</b></span></div></div>
+      <div class="cost">${+i.cost?money(i.cost,i.cur):'–'}${i.cur!=='KRW'&&+i.cost&&rateOf(i.cur)?`<small>≈ ${won(cost)}</small>`:''}${n&&cost?`<small>1박 ${won(cost/n)}</small>`:''}</div>
+      <div class="full">${d.addr?`<span class="dets">${esc(d.addr)}</span>`:''}${i.memo?`<span class="memo" style="font-size:13px;color:var(--muted)">${esc(i.memo)}</span>`:''}${tixBar(i)}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><button type="button" class="btn small" data-edit="${i.id}">수정</button>${hasLoc(i)?`<button type="button" class="btn small" data-plfocus="${i.id}">지도</button><a class="btn small" href="${gSearch(i.place,i.lat,i.lng)}" target="_blank" rel="noopener">구글 지도 ↗</a>`:''}</div></div></article>`}).join('')+'</div>';
+  if(saved.length)h+=`<div class="td-group"><span>후보 숙소 <span class="hint" style="font-weight:500">날짜를 안 정한 숙소</span></span></div><div class="places">${saved.map(i=>`<article class="pl" style="--c:var(--c-stay)"><b>${esc(i.place)}</b><span class="hint">${cityOf(i)?esc(cityOf(i).name)+' · ':''}${+i.cost?money(i.cost,i.cur):''}</span>${i.memo?`<span class="dets">${esc(i.memo)}</span>`:''}<div class="acts"><button type="button" class="btn small primary" data-sched="${i.id}">날짜 정하기</button><button type="button" class="btn small" data-edit="${i.id}">수정</button></div></article>`).join('')}</div>`;
+  el.innerHTML=h;
+}
+
 /* todo */
 const TGROUPS={pack:'준비물',doc:'서류 · 예약',money:'돈 · 통신',local:'현지에서',etc:'기타'};
 const TEMPLATE=[['여권 유효기간 확인 (6개월 이상)','doc',-30],['항공권 · 숙소 예약 확인','doc',-14],['여행자 보험 가입','doc',-7],['입국 서류 · 비자 확인','doc',-14],['환전 / 해외 결제 카드 준비','money',-3],['유심 · eSIM · 포켓와이파이','money',-3],['충전기 · 멀티 어댑터 · 보조배터리','pack',-1],['상비약','pack',-1],['옷 · 세면도구','pack',-1],['항공 온라인 체크인','doc',-1],['집 가스 · 전기 확인','etc',0]];
@@ -1256,13 +1293,14 @@ function renderPlaces(){
 function render(fit){
   renderHead();renderToday();renderCloud();
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.v===view));
-  ['route','todo','timeline','list','places','budget','recs'].forEach(v=>$('#v'+v[0].toUpperCase()+v.slice(1)).hidden=v!==view);
+  ['route','todo','stays','timeline','list','places','budget','recs'].forEach(v=>$('#v'+v[0].toUpperCase()+v.slice(1)).hidden=v!==view);
   if(view==='route')renderRoute();
   if(view==='timeline')renderTimeline();
   if(view==='list')renderList();
   if(view==='budget')renderBudget();
   if(view==='places')renderPlaces();
   if(view==='todo')renderTodo();
+  if(view==='stays')renderStays();
   todoBadge();
   if(view==='recs')renderRecs();
   renderMap(fit);renderRecMarkers();
@@ -1551,6 +1589,7 @@ document.addEventListener('click',e=>{
   const mc=e.target.closest('[data-mc]');if(mc){mapCity=mc.dataset.mc;mapDay='all';renderMap();renderRecMarkers();return}
   const tx=e.target.closest('[data-tix]');if(tx){e.stopPropagation();map&&map.closePopup();const today=iso(new Date());const ids=tx.dataset.tday?sorted(sched().filter(i=>i.date===today&&hasTix(i))).map(i=>i.id):tixList().map(i=>i.id);openTicket(tx.dataset.tix,ids);return}
   const tn=e.target.closest('[data-tnav]');if(tn){const ids=[...document.querySelectorAll('[data-tnav]')].length?null:null;const cur=tixList().map(i=>i.id);openTicket(tn.dataset.tnav,window._tvIds||cur);return}
+  const as=e.target.closest('[data-addstay]');if(as){const d=as.dataset.addstay;const n=d?(()=>{const x=parseD(d);x.setDate(x.getDate()+1);return iso(x)})():'';openForm(newItem(d,{cat:'stay',start:'15:00',det:{outDate:n,outTime:'11:00'}}));return}
   const vg=e.target.closest('[data-v-go]');if(vg){setView(vg.dataset.vGo);return}
   const tg=e.target.closest('[data-tg]');if(tg){tdGroup=tg.dataset.tg;renderTodo();return}
   const tdc=e.target.closest('[data-tdc]');if(tdc){const t=trip.todos.find(x=>x.id===tdc.dataset.tdc);if(t){t.done=tdc.checked;save();setTimeout(()=>{renderTodo();todoBadge()},120)}return}
