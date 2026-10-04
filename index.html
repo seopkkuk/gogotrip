@@ -515,7 +515,14 @@ function sample(){
 function blank(){const d=iso(new Date());return {title:'새 여행',start:d,end:d,people:1,budget:0,currency:'KRW',rates:{},isSample:false,cities:[],items:[]}}
 function migrate(t){
   t.currency=t.currency||'KRW';t.rates=t.rates||{};t.cities=Array.isArray(t.cities)?t.cities:[];t.todos=Array.isArray(t.todos)?t.todos:[];t.expenses=Array.isArray(t.expenses)?t.expenses:[];t.cities.forEach(c=>{c.id=c.id||uid()});
-  t.items.forEach(i=>{i.id=i.id||uid();i.cur=i.cur||'KRW';if(i.via===undefined)i.via=null});return t;
+  t.items.forEach(i=>{i.id=i.id||uid();i.cur=i.cur||'KRW';if(i.via===undefined)i.via=null;
+    if(i.via&&(+i.via.cost)){const vc=+i.via.cost,vcur=i.via.cur||i.cur;
+      if(vc===+i.cost&&vcur===i.cur){}            // 같은 금액을 두 번 넣은 경우: 한 번만
+      else if(vcur===i.cur){i.cost=(+i.cost||0)+vc;if(i.unit!==undefined){i.unit=i.cost;i.pax=1}}
+      else if(!+i.cost){i.cost=vc;i.cur=vcur}
+      else i.memo=((i.memo||'')+(i.memo?'\n':'')+'교통비 '+money(vc,vcur)).trim()}
+    if(i.via){delete i.via.cost;delete i.via.cur}
+    if(i.unit===undefined&&+i.cost){i.unit=+i.cost;i.pax=1}});return t;
 }
 let trip=null;
 try{trip=JSON.parse(localStorage.getItem(KEY))}catch(e){}
@@ -682,7 +689,7 @@ function renderHead(){
     (cs.length?`<span>${cs.map(c=>esc(c.name)).join(' → ')}</span>`:'')+
     (dd?`<span class="pill">${dd}</span>`:'')+(trip.isSample?`<span class="pill grey">예시 일정</span>`:'')+(trip.fromShare?`<span class="pill grey">${esc(trip.fromShare)}님이 공유한 일정</span>`:'')+(SHARED?`<span class="pill grey">공유받은 일정${SHARED.from?' · '+esc(SHARED.from):''} · ${esc((SHARED.at||'').slice(5,10).replace('-','/'))} 보냄</span>`:'');
   const total=sched().reduce((s,i)=>s+itemKRW(i),0)+xSum(),b=+trip.budget||0,pct=b?total/b*100:0;
-  const transit=sched().reduce((s,i)=>s+(i.via?krw(i.via.cost,i.via.cur):0),0);
+  const transit=sched().filter(i=>i.cat==='move').reduce((s,i)=>s+krw(i.cost,i.cur),0);
   const miss=sched().some(i=>(+i.cost&&missingRate(i.cur))||(i.via&&+i.via.cost&&missingRate(i.via.cur)));
   let dist=0;days.forEach(d=>{const l=itemsOf(d).filter(hasLoc);for(let k=1;k<l.length;k++)dist+=km(l[k-1],l[k])});
   $('#stats').innerHTML=`
@@ -691,7 +698,7 @@ function renderHead(){
      ${miss?'<span class="note" style="color:var(--warn)">환율이 없는 통화가 있어요. 여행 정보에서 넣어 주세요.</span>':''}</div>
    <div class="stat"><span class="k">1인당</span><span class="v mono">${won(total/(trip.people||1))}</span><span class="note">${trip.people||1}명 기준</span></div>
    <div class="stat"><span class="k">방문 도시</span><span class="v mono">${cs.length}곳 · ${nations.length}개국</span><span class="note">${usedCurs().length?'통화: '+['KRW',...usedCurs()].join(', '):'원화만 사용'}${saved().length?' · 저장한 곳 '+saved().length+'곳':''}</span></div>
-   <div class="stat"><span class="k">구간 교통비</span><span class="v mono">${won(transit)}</span><span class="note">일정 사이 이동 요금 · 직선 ${dist.toFixed(1)}km</span></div>`;
+   <div class="stat"><span class="k">교통비</span><span class="v mono">${won(transit)}</span><span class="note">교통 일정 합계 · 이동 거리(직선) ${dist.toFixed(1)}km</span></div>`;
 }
 
 /* timeline */
@@ -934,7 +941,7 @@ function renderBudget(){
   const b=+trip.budget||0;
   el.innerHTML=pigHtml()+`<div class="budget">
     <div class="panel"><h3>항목별 (원화)</h3>${byCat.map(x=>`<div class="bar-row"><span><i class="dot" style="background:var(${CATS[x.k].v})"></i> ${CATS[x.k].label}</span><div class="bar"><i style="width:${x.v/maxC*100}%;background:var(${CATS[x.k].v})"></i></div><span class="n">${won(x.v)}</span></div>`).join('')||'<span class="hint">금액이 들어간 일정이 없어요</span>'}
-      ${total?`<span class="hint">비중: ${byCat.map(x=>`${CATS[x.k].label} ${(x.v/total*100).toFixed(0)}%`).join(' · ')}<br>교통에는 일정 사이 이동 요금도 포함돼요.</span>`:''}</div>
+      ${total?`<span class="hint">비중: ${byCat.map(x=>`${CATS[x.k].label} ${(x.v/total*100).toFixed(0)}%`).join(' · ')}</span>`:''}</div>
     <div class="panel"><h3>날짜별</h3>${byDay.map(x=>`<div class="bar-row"><span>${x.i+1}일차 <span class="hint">${fmtD(x.d).split(' ')[0]}</span></span><div class="bar"><i style="width:${x.v/maxD*100}%;background:${dayColor(x.i)}"></i></div><span class="n">${won(x.v)}</span></div>`).join('')}
       ${b&&days.length?`<span class="hint">예산을 하루로 나누면 ${won(b/days.length)}</span>`:''}</div>
     ${cities().length?(()=>{const rows=cities().map(c=>({c,v:sched().filter(i=>cityOf(i)===c).reduce((s,i)=>s+itemKRW(i),0)}));const none=sched().filter(i=>!cityOf(i)).reduce((s,i)=>s+itemKRW(i),0);const mx=Math.max(1,none,...rows.map(r=>r.v));
@@ -1411,7 +1418,7 @@ function renderBook(){
     <div class="stat"><span class="k">예약</span><span class="v mono">${rDone} / ${rs.length}</span><span class="note">${rNeed?`<span style="color:var(--warn)">예약 필요 ${rNeed}개</span>`:(rs.length?'모두 예약했어요':'예약할 곳이 없어요')}</span></div>
     <div class="stat"><span class="k">이미 낸 돈</span><span class="v mono">${won(paid)}</span>${total?`<div class="meter"><i style="width:${Math.min(100,paid/total*100)}%"></i></div>`:''}<span class="note">결제 완료로 표시한 금액</span></div>
     <div class="stat"><span class="k">앞으로 낼 돈</span><span class="v mono">${won(onsite+unpaid)}</span><span class="note">현장 결제 ${won(onsite)} · 아직 안 냄 ${won(unpaid)}</span></div>
-    <div class="stat"><span class="k">결제 상태 미정</span><span class="v mono">${won(unset)}</span><span class="note">구간 교통비 ${won(viaSum)}는 따로예요</span></div>
+    <div class="stat"><span class="k">결제 상태 미정</span><span class="v mono">${won(unset)}</span><span class="note">결제 상태를 아직 안 고른 금액</span></div>
   </div>
   ${Object.keys(cash).length?`<div class="todo"><b>현지에서 낼 돈 (통화별)</b><ul>${Object.entries(cash).map(([c,v])=>`<li><span>${esc(CURS[c]||c)}</span><span class="mono">${money(v,c)}${rateOf(c)?` <span class="hint">≈ ${won(v*rateOf(c))}</span>`:''}</span></li>`).join('')}</ul></div>`:''}
   <div class="kinds" style="margin-bottom:6px">${[['all','전체'],['need','예약 필요'],['topay','결제 남음'],['unset','결제 미정'],['tix','티켓 있음']].map(([k,l])=>`<button type="button" data-bkf="${k}" aria-pressed="${bkF===k}">${l}</button>`).join('')}</div>
@@ -1534,7 +1541,12 @@ function openForm(item,keep){
     <div class="quickt" id="fQuickT"><span class="hint" style="align-self:center">머무는 시간:</span>${[[30,'30분'],[60,'1시간'],[90,'1시간 반'],[120,'2시간'],[180,'3시간']].map(([n,l])=>`<button type="button" data-dur="${n}">${l}</button>`).join('')}<button type="button" data-dur="clear">지우기</button></div>
     <div class="f" id="fCityWrap"><label for="fCity">도시</label><select id="fCity"><option value="">도시 없음</option>${cities().map(c=>`<option value="${c.id}" ${c.id===d.cityId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div id="fDetail"></div>
-    <div class="f"><label for="fCost">금액 (인원 전체)</label><div class="money"><input id="fCost" inputmode="decimal" placeholder="0" value="${d.cost?fmtIn(d.cost):''}"><select id="fCur" aria-label="통화">${curOptions(d.cur||defaultCur(d.date))}</select></div><span class="hint" id="fConv"></span></div>
+    <div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+      <div class="f"><label for="fUnit">1인당 금액</label><div class="money"><input id="fUnit" inputmode="decimal" placeholder="0" value="${(d.unit??d.cost)?fmtIn(d.unit??d.cost):''}"><select id="fCur" aria-label="통화">${curOptions(d.cur||defaultCur(d.date))}</select></div></div>
+      <div class="f"><label for="fPax">인원</label><input id="fPax" type="number" min="1" inputmode="numeric" value="${d.pax||(d.unit!==undefined||!d.cost?(trip.people||1):1)}"></div>
+    </div>
+    <div class="st" id="fTotal" style="font-size:14px;margin-top:-6px"></div>
+    <span class="hint" style="margin-top:-8px">숙소처럼 방 하나에 한 번 내는 금액은 인원을 1로 두세요.</span>
     <div class="f"><label for="fMemo">내 설명 · 메모</label><textarea id="fMemo" class="inp" rows="3" placeholder="이곳에 대해 적어 두고 싶은 것 (왜 가는지, 꼭 할 것, 주의할 점…)">${esc(d.memo||'')}</textarea></div>
     <details class="more" id="dTix" ${hasTix(d)||d.resv||d.pay?'open':''}><summary>예약 · 결제 · 티켓 <span class="hint">예약 여부, 결제, 예약번호, QR 사진</span></summary><div class="inner">
       <div class="catpick" id="fResv">${Object.entries(RESV).map(([k,l])=>`<button type="button" data-r="${k}" aria-pressed="${(d.resv||'')===k}">${l}</button>`).join('')}</div>
@@ -1551,10 +1563,10 @@ function openForm(item,keep){
     </div></details>
     <details class="more" id="dVia" ${via.mode?'open':''}><summary>여기로 오는 방법 <span class="hint" id="fFrom"></span></summary><div class="inner">
       <div class="catpick" id="fMode"><button type="button" data-m="" aria-pressed="${!via.mode}">안 정함</button>${Object.entries(MODES).map(([k,m])=>`<button type="button" data-m="${k}" aria-pressed="${via.mode===k}">${m.label}</button>`).join('')}</div>
-      <div class="grid3">
+      <span class="hint">교통비는 이 칸이 아니라 위쪽 금액 칸에 넣어 주세요. (이동 자체를 따로 관리하려면 "교통" 일정을 하나 추가하세요)</span>
+      <div class="grid2">
         <div class="f"><label for="vLine">노선 · 편명</label><input id="vLine" placeholder="예: 긴자선, 101번 버스" value="${esc(via.line||'')}"></div>
         <div class="f"><label for="vMins">걸리는 시간(분)</label><input id="vMins" inputmode="numeric" value="${esc(via.mins||'')}"></div>
-        <div class="f"><label for="vCost">요금 (전체)</label><div class="money"><input id="vCost" inputmode="decimal" value="${via.cost?fmtIn(via.cost):''}"><select id="vCur" aria-label="요금 통화">${curOptions(via.cur||trip.currency||'KRW')}</select></div></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn small" id="vDir" target="_blank" rel="noopener" hidden>구글 길찾기 ↗</a><button type="button" class="btn small" id="vAsk" hidden>Claude에게 이동 방법 묻기</button><span class="st" id="vSt"></span></div>
     </div></details>
@@ -1569,7 +1581,7 @@ function openForm(item,keep){
     if(!$('#fStart').value){toast('시작 시간을 먼저 골라 주세요');return}$('#fEnd').setTime(addMin($('#fStart').value,+b.dataset.dur))};
   const locSt=(m,ok)=>{const s=$('#fLocSt');s.textContent=m;s.className='st'+(ok?' ok':'');const q=$('#fLocSum');if(q)q.textContent=loc?'위치 있음':'위치 없음'};
   const setLoc=(p,m)=>{loc=p;$('#fCoord').value=p.lat+', '+p.lng;$('#fResults').innerHTML='';locSt(m||'위치 지정됨',true);updFrom()};
-  const conv=()=>{const c=$('#fCur').value,n=numIn($('#fCost').value);$('#fConv').textContent=c!=='KRW'&&n?(rateOf(c)?'≈ '+won(n*rateOf(c)):'이 통화의 환율을 여행 정보에서 넣어 주세요'):''};
+  const conv=()=>{const c=$('#fCur').value,u=numIn($('#fUnit').value),px=Math.max(1,parseInt($('#fPax').value)||1),tot=u*px;$('#fTotal').innerHTML=u?`총액 <b class="mono">${money(tot,c)}</b>${px>1?` <span class="hint">(${money(u,c)} × ${px}명)</span>`:''}${c!=='KRW'?(rateOf(c)?` <span class="hint">≈ ${won(krw(tot,c))}</span>`:' <span class="hint">환율을 여행 정보에서 넣어 주세요</span>'):''}`:''};
   conv();
   function updFrom(){
     const p=prevOf({...d,date:$('#fDate').value,start:$('#fStart').value});
@@ -1638,9 +1650,9 @@ function openForm(item,keep){
   drawTix();
   const cityVis=()=>{$('#fCityWrap').hidden=!!$('#fDate').value||!cities().length};cityVis();
   let curTouched=!isNew||!!d.place;
-  $('#fDate').onchange=()=>{updFrom();cityVis();if(!curTouched){$('#fCur').value=defaultCur($('#fDate').value);if(!numIn($('#vCost').value))$('#vCur').value=defaultCur($('#fDate').value);conv()}};$('#fStart').onchange=updFrom;
+  $('#fDate').onchange=()=>{updFrom();cityVis();if(!curTouched){$('#fCur').value=defaultCur($('#fDate').value);conv()}};$('#fStart').onchange=updFrom;
   $('#fMode').onclick=e=>{const b=e.target.closest('button');if(!b)return;via.mode=b.dataset.m;$('#fMode').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));updFrom()};
-  ['fCost','vCost'].forEach(id=>$('#'+id).oninput=e=>{e.target.value=fmtIn(e.target.value);conv()});
+  $('#fUnit').oninput=e=>{e.target.value=fmtIn(e.target.value);conv()};$('#fPax').oninput=conv;
   $('#fCur').onchange=()=>{curTouched=true;conv()};
   $('#fCoord').oninput=e=>{const p=parseCoord(e.target.value);if(p){loc=p;locSt(`위치 지정됨 (${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})`,true);updFrom()}else if(!e.target.value.trim()){loc=null;locSt('위치 없음');updFrom()}else locSt('좌표를 찾지 못했어요. "위도, 경도" 형태로 넣어 주세요.')};
   async function search(q){
@@ -1676,17 +1688,17 @@ function openForm(item,keep){
         via.mode=out.mode;$('#fMode').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.m===out.mode));
         $('#vLine').value=out.line||'';$('#vMins').value=+out.mins||'';
         const cur=String(out.currency||'').toUpperCase();
-        if(+out.fare_per_person){$('#vCost').value=fmtIn(String((+out.fare_per_person)*(trip.people||1)));if([...$('#vCur').options].some(o=>o.value===cur))$('#vCur').value=cur}
+        if(+out.fare_per_person)out.note=(out.note||'')+` 요금은 1인 약 ${money(out.fare_per_person,CURS[cur]?cur:'KRW')}.`;
         st.textContent='대략적인 정보예요. '+(out.note||'')+' 길찾기로 확인해 보세요.';updFrom();
       }else st.textContent='답을 받지 못했어요.';
     }catch(e){st.textContent=e&&e.code==='not_granted'?'Claude 사용이 허용되지 않았어요.':'답을 받지 못했어요. 다시 눌러 주세요.'}
     finally{$('#vAsk').disabled=false}
   };
   const gather=()=>{
-    const v={mode:via.mode,line:$('#vLine').value.trim(),mins:numIn($('#vMins').value)||'',cost:numIn($('#vCost').value),cur:$('#vCur').value};
+    const v={mode:via.mode,line:$('#vLine').value.trim(),mins:numIn($('#vMins').value)||''};
     return {...d,place:$('#fPlace').value.trim(),date:$('#fDate').value,start:$('#fStart').value,end:$('#fEnd').value,cat,
-      cost:numIn($('#fCost').value),cur:$('#fCur').value,memo:$('#fMemo').value.trim(),lat:loc?loc.lat:undefined,lng:loc?loc.lng:undefined,
-      via:(v.mode||v.line||v.mins||v.cost)?v:null,det:Object.fromEntries(Object.entries(det).filter(([k,x])=>x&&((FIELDS[cat]||[]).some(f=>f[0]===k)||['resno','phone','addr','link'].includes(k)))),resv,prio,pay,
+      unit:numIn($('#fUnit').value),pax:Math.max(1,parseInt($('#fPax').value)||1),cost:numIn($('#fUnit').value)*Math.max(1,parseInt($('#fPax').value)||1),cur:$('#fCur').value,memo:$('#fMemo').value.trim(),lat:loc?loc.lat:undefined,lng:loc?loc.lng:undefined,
+      via:(v.mode||v.line||v.mins)?v:null,det:Object.fromEntries(Object.entries(det).filter(([k,x])=>x&&((FIELDS[cat]||[]).some(f=>f[0]===k)||['resno','phone','addr','link'].includes(k)))),resv,prio,pay,
       cityId:$('#fDate').value?(d.cityId||''):$('#fCity').value,
       tix:{links:tix.links.filter(l=>l.url),files:tix.files,holder:tix.holder,count:tix.count}};
   };
