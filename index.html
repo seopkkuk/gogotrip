@@ -371,6 +371,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
         <button class="tab" role="tab" data-v="route">여행 경로</button>
         <button class="tab" role="tab" data-v="todo" id="tabTodo">할 일</button>
         <button class="tab" role="tab" data-v="stays">숙소</button>
+        <button class="tab" role="tab" data-v="book">예약 · 결제</button>
         <button class="tab" role="tab" data-v="timeline">타임라인</button>
         <button class="tab" role="tab" data-v="list">일정표 · 교통</button>
         <button class="tab" role="tab" data-v="places">장소 모음</button>
@@ -380,6 +381,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
       <section id="vRoute" hidden></section>
       <section id="vTodo" hidden></section>
       <section id="vStays" hidden></section>
+      <section id="vBook" hidden></section>
       <section id="vTimeline" hidden></section>
       <section id="vList" hidden></section>
       <section id="vPlaces" hidden></section>
@@ -429,6 +431,7 @@ const FIELDS={
   etc:[['menu','할 일','예: 환전, 유심, 여행자 보험']]
 };
 const RESV={'':'예약 안 함',need:'예약 필요',done:'예약 완료'};
+const PAY={'':'결제 안 정함',paid:'결제 완료',onsite:'현장 결제',unpaid:'아직 안 냄'};
 
 const MODES={
   walk:{label:'도보',dash:'1 7',gm:'walking'}, subway:{label:'지하철',dash:null,gm:'transit'}, bus:{label:'버스',dash:'10 6',gm:'transit'},
@@ -455,10 +458,10 @@ function sample(){
     {id:'c2',name:'오사카',country:'일본',start:D(3),end:D(4),currency:'JPY',tz:0,lat:34.6937,lng:135.5023},
     {id:'c3',name:'방콕',country:'태국',start:D(4),end:D(6),currency:'THB',tz:-2,lat:13.7563,lng:100.5018}],
   items:[
-    Object.assign(it(D(1),'08:30','11:00','인천 → 하네다','move',300000,'KRW','편도 항공권 2인',35.5494,139.7798,v('flight','',150,0,'KRW')),{resv:'done',det:{code:'KE2101',from:'인천 T2',to:'하네다 T3',resno:'ABC123'},tix:{links:[{label:'모바일 탑승권',url:'https://www.koreanair.com'}],files:[],holder:'',count:'성인 2명'}}),
+    Object.assign(it(D(1),'08:30','11:00','인천 → 하네다','move',300000,'KRW','편도 항공권 2인',35.5494,139.7798,v('flight','',150,0,'KRW')),{resv:'done',pay:'paid',det:{code:'KE2101',from:'인천 T2',to:'하네다 T3',resno:'ABC123'},tix:{links:[{label:'모바일 탑승권',url:'https://www.koreanair.com'}],files:[],holder:'',count:'성인 2명'}}),
     it(D(1),'12:30','13:30','츠키지 장외시장 점심','food',5000,'JPY','해산물 덮밥, 계란말이 꼬치',35.6655,139.7707,v('train','게이큐선 → 도에이 아사쿠사선',40,1120)),
     it(D(1),'14:30','16:30','센소지 · 나카미세도리','see',0,'JPY','오미쿠지 100엔',35.7148,139.7967,v('subway','도에이 아사쿠사선',20,720)),
-    Object.assign(it(D(1),'17:00','17:30','아사쿠사 호텔 체크인','stay',52000,'JPY','2박 합계',35.7100,139.7980,v('walk','',10,0)),{resv:'done',det:{outDate:D(3),outTime:'10:00',vendor:'아고다',room:'트윈룸',resno:'1234567890'},tix:{links:[{label:'아고다 예약 확인',url:'https://www.agoda.com'}],files:[],holder:'',count:'2인 · 2박'}}),
+    Object.assign(it(D(1),'17:00','17:30','아사쿠사 호텔 체크인','stay',52000,'JPY','2박 합계',35.7100,139.7980,v('walk','',10,0)),{resv:'done',pay:'paid',det:{outDate:D(3),outTime:'10:00',vendor:'아고다',room:'트윈룸',resno:'1234567890'},tix:{links:[{label:'아고다 예약 확인',url:'https://www.agoda.com'}],files:[],holder:'',count:'2인 · 2박'}}),
     Object.assign(it(D(1),'18:30','20:30','도쿄 스카이트리 전망대','see',7200,'JPY','일몰 시간 예약',35.7101,139.8107,v('walk','스미다강 건너서',20,0)),{resv:'need',det:{hours:'10:00–21:00'}}),
     it(D(2),'09:30','11:00','메이지 신궁','see',0,'JPY','',35.6764,139.6993,v('subway','긴자선 → JR 야마노테선',40,840)),
     it(D(2),'11:00','13:30','하라주쿠 · 오모테산도','shop',20000,'JPY','다케시타도리',35.6702,139.7027,v('walk','',10,0)),
@@ -470,7 +473,7 @@ function sample(){
     it(D(3),'18:00','20:30','도톤보리 저녁','food',7000,'JPY','다코야키, 오코노미야키',34.6687,135.5013,v('walk','',5,0)),
     it(D(4),'08:30','09:30','간사이 공항','move',0,'JPY','',34.4320,135.2304,v('train','난카이 라피트',40,2900)),
     it(D(4),'11:00','15:30','간사이 → 방콕 수완나품','move',360000,'KRW','편도 2인 · 도착은 방콕 시간',13.6900,100.7501,v('flight','',390,0,'KRW')),
-    Object.assign(it(D(4),'17:00','17:30','수쿰윗 호텔 체크인','stay',6000,'THB','2박',13.7380,100.5606,v('train','공항철도 → BTS',50,180,'THB')),{resv:'done',det:{outDate:D(6),outTime:'12:00',vendor:'아고다',room:'조식 포함'}}),
+    Object.assign(it(D(4),'17:00','17:30','수쿰윗 호텔 체크인','stay',6000,'THB','2박',13.7380,100.5606,v('train','공항철도 → BTS',50,180,'THB')),{resv:'done',pay:'onsite',det:{outDate:D(6),outTime:'12:00',vendor:'아고다',room:'조식 포함'}}),
     it(D(4),'19:00','21:00','쩟페어 야시장','food',1200,'THB','',13.7560,100.5660,v('taxi','',15,150,'THB')),
     it(D(5),'09:00','11:30','왕궁 · 왓 프라깨우','see',1000,'THB','긴바지 필수',13.7500,100.4913,v('ship','BTS → 짜오프라야 보트',45,120,'THB')),
     it(D(5),'12:00','13:30','왓 아룬','see',200,'THB','',13.7437,100.4888,v('ship','건너편 배',5,10,'THB')),
@@ -498,7 +501,7 @@ if(!trip&&!SHARED&&!COLLAB){try{const old=JSON.parse(localStorage.getItem('tripP
 if(!trip||!Array.isArray(trip.items)||(trip.isSample&&!(trip.cities&&trip.items.some(i=>i.tix))))trip=sample();
 migrate(trip);
 let view='route';try{view=localStorage.getItem(KEY+'.view')||'route'}catch(e){}
-if(!['route','todo','stays','timeline','list','places','budget','recs'].includes(view))view='route';
+if(!['route','todo','stays','book','timeline','list','places','budget','recs'].includes(view))view='route';
 let mapCity='all',mapDay='all',picking=null,selId=null,sampleFn=null,recs=[],recCtl=null;
 const DEVICE=uid();let dbApi=null,uidV=null,isOwnerV=false,assetsFn=null,cloudOn=false,pushT=null,pushing=Promise.resolve();
 function localSave(){try{localStorage.setItem(KEY,JSON.stringify(trip))}catch(e){}
@@ -630,7 +633,7 @@ function detBits(i,full){const d=i.det||{},b=[];
   (FIELDS[i.cat]||[]).forEach(([k,l])=>{if(['outDate','outTime','code','from','to'].includes(k))return;if(d[k])b.push(`${l.split(' ')[0]}: ${esc(d[k])}`)});
   if(full){if(d.resno)b.push('예약번호 '+esc(d.resno));if(d.addr)b.push(esc(d.addr));if(d.phone)b.push(esc(d.phone));if(false)b.push(`<a href="${esc(d.link)}" target="_blank" rel="noopener">링크 ↗</a>`)}
   return b}
-const badges=i=>(i.prio==='must'?'<span class="badge must">꼭 가기</span> ':'')+(i.resv?`<span class="badge ${i.resv}">${RESV[i.resv]}</span>`:'');
+const badges=i=>(i.prio==='must'?'<span class="badge must">꼭 가기</span> ':'')+(i.resv?`<span class="badge ${i.resv}">${RESV[i.resv]}</span> `:'')+(i.pay&&+i.cost?`<span class="badge ${i.pay==='paid'?'done':i.pay==='unpaid'?'need':''}">${PAY[i.pay]}</span>`:'');
 const staysOn=d=>sched().filter(i=>i.cat==='stay'&&i.det&&i.det.outDate&&i.date<=d&&d<i.det.outDate);
 const stayLine=d=>{const s=staysOn(d);return s.length?`<span class="stayline">숙소: ${s.map(x=>esc(x.place.replace(/ 체크인$/,''))).join(', ')}</span>`:''};
 function cityOf(i){if(!i.date)return cities().find(c=>c.id===i.cityId)||null;let cs=citiesOn(i.date);if(hasLoc(i))cs=cs.filter(c=>!hasLoc(c)||km(c,i)<250);if(cs.length<2)return cs[0]||null;
@@ -1160,7 +1163,7 @@ function copyTrip(src,newStart,title){
   const off=src.start&&newStart?Math.round((parseD(newStart)-parseD(src.start))/864e5):0;
   const sh=d=>{if(!d||!off)return d;const x=parseD(d);x.setDate(x.getDate()+off);return iso(x)};
   t.start=sh(t.start);t.end=sh(t.end);(t.cities||[]).forEach(c=>{c.start=sh(c.start);c.end=sh(c.end)});
-  (t.items||[]).forEach(i=>{i.date=sh(i.date);if(i.det){if(i.det.outDate)i.det.outDate=sh(i.det.outDate);delete i.det.resno}if(i.resv)i.resv='need';i.tix={links:[],files:[],holder:'',count:''}});
+  (t.items||[]).forEach(i=>{i.date=sh(i.date);if(i.det){if(i.det.outDate)i.det.outDate=sh(i.det.outDate);delete i.det.resno}if(i.resv)i.resv='need';if(i.pay)i.pay='';i.tix={links:[],files:[],holder:'',count:''}});
   (t.todos||[]).forEach(x=>{x.done=false;x.due=sh(x.due)});
   const dn={};Object.entries(t.dayNotes||{}).forEach(([k,v])=>dn[sh(k)]=v);t.dayNotes=dn;
   ['fromShare','_loading','updatedAt','isSample','localId','shareFrom'].forEach(k=>delete t[k]);
@@ -1306,6 +1309,39 @@ function renderStays(){
   el.innerHTML=h;
 }
 
+/* 예약 · 결제 */
+let bkF='all';
+const BKG=[['move','교통 · 항공'],['stay','숙소'],['see','관광지 · 체험',['see','tour','night','spa']],['food','음식점 · 카페',['food','cafe']],['etc','쇼핑 · 기타',['shop','etc']]];
+function renderBook(){
+  const el=$('#vBook');
+  const pool=sched().filter(i=>i.resv||i.pay||+i.cost||hasTix(i));
+  const rs=pool.filter(i=>i.resv),rDone=rs.filter(i=>i.resv==='done').length,rNeed=rs.filter(i=>i.resv==='need').length;
+  const sumBy=f=>pool.filter(f).reduce((s,i)=>s+krw(i.cost,i.cur),0);
+  const paid=sumBy(i=>i.pay==='paid'),onsite=sumBy(i=>i.pay==='onsite'),unpaid=sumBy(i=>i.pay==='unpaid'),unset=sumBy(i=>!i.pay&&+i.cost);
+  const viaSum=sched().reduce((s,i)=>s+(i.via?krw(i.via.cost,i.via.cur):0),0);
+  const cash={};pool.filter(i=>(i.pay==='onsite'||i.pay==='unpaid')&&+i.cost&&i.cur!=='KRW').forEach(i=>cash[i.cur]=(cash[i.cur]||0)+(+i.cost));
+  const total=paid+onsite+unpaid+unset;
+  let h=`<div class="stats" style="margin-bottom:12px">
+    <div class="stat"><span class="k">예약</span><span class="v mono">${rDone} / ${rs.length}</span><span class="note">${rNeed?`<span style="color:var(--warn)">예약 필요 ${rNeed}개</span>`:(rs.length?'모두 예약했어요':'예약할 곳이 없어요')}</span></div>
+    <div class="stat"><span class="k">이미 낸 돈</span><span class="v mono">${won(paid)}</span>${total?`<div class="meter"><i style="width:${Math.min(100,paid/total*100)}%"></i></div>`:''}<span class="note">결제 완료로 표시한 금액</span></div>
+    <div class="stat"><span class="k">앞으로 낼 돈</span><span class="v mono">${won(onsite+unpaid)}</span><span class="note">현장 결제 ${won(onsite)} · 아직 안 냄 ${won(unpaid)}</span></div>
+    <div class="stat"><span class="k">결제 상태 미정</span><span class="v mono">${won(unset)}</span><span class="note">구간 교통비 ${won(viaSum)}는 따로예요</span></div>
+  </div>
+  ${Object.keys(cash).length?`<div class="todo"><b>현지에서 낼 돈 (통화별)</b><ul>${Object.entries(cash).map(([c,v])=>`<li><span>${esc(CURS[c]||c)}</span><span class="mono">${money(v,c)}${rateOf(c)?` <span class="hint">≈ ${won(v*rateOf(c))}</span>`:''}</span></li>`).join('')}</ul></div>`:''}
+  <div class="kinds" style="margin-bottom:6px">${[['all','전체'],['need','예약 필요'],['topay','결제 남음'],['unset','결제 미정'],['tix','티켓 있음']].map(([k,l])=>`<button type="button" data-bkf="${k}" aria-pressed="${bkF===k}">${l}</button>`).join('')}</div>
+  <span class="hint">배지를 누르면 상태가 바로 바뀌어요. 예약: 안 함 → 필요 → 완료 / 결제: 미정 → 아직 안 냄 → 현장 결제 → 결제 완료</span>`;
+  const flt=i=>bkF==='all'||(bkF==='need'&&i.resv==='need')||(bkF==='topay'&&(i.pay==='onsite'||i.pay==='unpaid'))||(bkF==='unset'&&!i.pay&&+i.cost)||(bkF==='tix'&&hasTix(i));
+  let any=false;
+  BKG.forEach(([k,label,cats])=>{const cs=cats||[k];const l=sorted(pool.filter(i=>cs.includes(i.cat)&&flt(i)));if(!l.length)return;any=true;
+    const g=l.reduce((s,i)=>s+krw(i.cost,i.cur),0);
+    h+=`<div class="td-group"><span>${label}</span><span class="mono hint">${won(g)}</span></div><ul class="td-list">${l.map(i=>`<li class="td" style="grid-template-columns:minmax(0,1fr) auto">
+      <div class="tx"><b>${esc(i.place)}</b><span class="hint">${fmtD(i.date)} ${esc(i.start||'')}${cityOf(i)?' · '+esc(cityOf(i).name):''}${i.det&&i.det.resno?' · 예약번호 '+esc(i.det.resno):''}</span>
+        <div class="meta"><button type="button" class="badge ${i.resv||''}" data-cycr="${i.id}" style="cursor:pointer;background:none">${RESV[i.resv||'']}</button><button type="button" class="badge ${i.pay==='paid'?'done':i.pay==='unpaid'?'need':''}" data-cycp="${i.id}" style="cursor:pointer;background:none">${PAY[i.pay||'']}</button>${hasTix(i)?`<button type="button" class="tixbtn" data-tix="${i.id}">티켓 보기</button>`:''}</div></div>
+      <div style="text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span class="mono" style="font-weight:700">${+i.cost?money(i.cost,i.cur):'–'}</span>${i.cur!=='KRW'&&+i.cost&&rateOf(i.cur)?`<span class="hint mono">≈ ${won(krw(i.cost,i.cur))}</span>`:''}<button type="button" class="edit" data-edit="${i.id}">수정</button></div></li>`).join('')}</ul>`});
+  if(!any)h+=`<div class="day" style="margin-top:12px"><div class="empty">${pool.length?'조건에 맞는 항목이 없어요.':'금액이나 예약 정보를 넣은 일정이 아직 없어요. 일정 수정에서 <b>예약 · 결제 · 티켓</b>을 펼쳐 넣어 보세요.'}</div></div>`;
+  el.innerHTML=h;
+}
+
 /* todo */
 const TGROUPS={pack:'준비물',doc:'서류 · 예약',money:'돈 · 통신',local:'현지에서',etc:'기타'};
 const TEMPLATE=[['여권 유효기간 확인 (6개월 이상)','doc',-30],['항공권 · 숙소 예약 확인','doc',-14],['여행자 보험 가입','doc',-7],['입국 서류 · 비자 확인','doc',-14],['환전 / 해외 결제 카드 준비','money',-3],['유심 · eSIM · 포켓와이파이','money',-3],['충전기 · 멀티 어댑터 · 보조배터리','pack',-1],['상비약','pack',-1],['옷 · 세면도구','pack',-1],['항공 온라인 체크인','doc',-1],['집 가스 · 전기 확인','etc',0]];
@@ -1373,7 +1409,7 @@ function renderPlaces(){
 function render(fit){
   renderHead();renderToday();renderCloud();
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.v===view));
-  ['route','todo','stays','timeline','list','places','budget','recs'].forEach(v=>$('#v'+v[0].toUpperCase()+v.slice(1)).hidden=v!==view);
+  ['route','todo','stays','book','timeline','list','places','budget','recs'].forEach(v=>$('#v'+v[0].toUpperCase()+v.slice(1)).hidden=v!==view);
   if(view==='route')renderRoute();
   if(view==='timeline')renderTimeline();
   if(view==='list')renderList();
@@ -1381,6 +1417,7 @@ function render(fit){
   if(view==='places')renderPlaces();
   if(view==='todo')renderTodo();
   if(view==='stays')renderStays();
+  if(view==='book')renderBook();
   todoBadge();
   if(view==='recs')renderRecs();
   renderMap(fit);renderRecMarkers();
@@ -1413,8 +1450,9 @@ function openForm(item,keep){
     <div id="fDetail"></div>
     <div class="f"><label for="fCost">금액 (인원 전체)</label><div class="money"><input id="fCost" inputmode="decimal" placeholder="0" value="${d.cost?fmtIn(d.cost):''}"><select id="fCur" aria-label="통화">${curOptions(d.cur||defaultCur(d.date))}</select></div><span class="hint" id="fConv"></span></div>
     <div class="f"><label for="fMemo">내 설명 · 메모</label><textarea id="fMemo" class="inp" rows="3" placeholder="이곳에 대해 적어 두고 싶은 것 (왜 가는지, 꼭 할 것, 주의할 점…)">${esc(d.memo||'')}</textarea></div>
-    <details class="more" id="dTix" ${hasTix(d)||d.resv?'open':''}><summary>예약 · 티켓 <span class="hint">예약번호, 링크, QR 사진</span></summary><div class="inner">
+    <details class="more" id="dTix" ${hasTix(d)||d.resv||d.pay?'open':''}><summary>예약 · 결제 · 티켓 <span class="hint">예약 여부, 결제, 예약번호, QR 사진</span></summary><div class="inner">
       <div class="catpick" id="fResv">${Object.entries(RESV).map(([k,l])=>`<button type="button" data-r="${k}" aria-pressed="${(d.resv||'')===k}">${l}</button>`).join('')}</div>
+      <div class="f"><span class="flabel">결제</span><div class="catpick" id="fPay">${Object.entries(PAY).map(([k,l])=>`<button type="button" data-py="${k}" aria-pressed="${(d.pay||'')===k}">${l}</button>`).join('')}</div></div>
       <div class="f"><label for="x_resno">예약번호</label><input id="x_resno" data-k="resno" value="${esc((d.det||{}).resno||'')}"></div>
       <div id="fTix" style="display:flex;flex-direction:column;gap:12px"></div>
     </div></details>
@@ -1455,7 +1493,7 @@ function openForm(item,keep){
     return p;
   }
   updFrom();
-  const det={...(d.det||{})};let resv=d.resv||'',prio=d.prio||'';
+  const det={...(d.det||{})};let resv=d.resv||'',prio=d.prio||'',pay=d.pay||'';
   const NAMEPH={move:'예: 인천 → 하네다, 신칸센 도쿄 → 오사카',stay:'예: 아사쿠사 호텔',food:'예: 이치란 라멘',cafe:'예: 블루보틀 커피',see:'예: 센소지',tour:'예: 후지산 반일 투어',shop:'예: 돈키호테',night:'예: 시부야 스카이',spa:'예: 타이 마사지',etc:'예: 환전, 유심 사기'};
   function drawDetail(){
     const fl=FIELDS[cat]||[];
@@ -1476,6 +1514,7 @@ function openForm(item,keep){
   $('#fStep1').onclick=e=>{const b=e.target.closest('[data-pick]');if(b){cat=b.dataset.pick;$('#fStep1').hidden=true;$('#fStep2').hidden=false;applyCat();setTimeout(()=>$('#fPlace').focus(),30);return}if(e.target.closest('[data-fcancel]'))closeForm()};
   $('#fChangeCat').onclick=()=>{$('#fStep2').hidden=true;$('#fStep1').hidden=false};
   $('#fMust').onclick=()=>{prio=prio==='must'?'':'must';$('#fMust').setAttribute('aria-pressed',prio==='must')};
+  $('#fPay').onclick=e=>{const b=e.target.closest('[data-py]');if(!b)return;pay=b.dataset.py;$('#fPay').querySelectorAll('[data-py]').forEach(x=>x.setAttribute('aria-pressed',x===b))};
   $('#fResv').onclick=e=>{const b=e.target.closest('[data-r]');if(!b)return;resv=b.dataset.r;$('#fResv').querySelectorAll('[data-r]').forEach(x=>x.setAttribute('aria-pressed',x===b))};
   ['x_resno','x_addr','x_phone'].forEach(id=>{const x=$('#'+id);x.oninput=()=>{det[x.dataset.k]=x.value.trim()}});
   applyCat();
@@ -1561,7 +1600,7 @@ function openForm(item,keep){
     const v={mode:via.mode,line:$('#vLine').value.trim(),mins:numIn($('#vMins').value)||'',cost:numIn($('#vCost').value),cur:$('#vCur').value};
     return {...d,place:$('#fPlace').value.trim(),date:$('#fDate').value,start:$('#fStart').value,end:$('#fEnd').value,cat,
       cost:numIn($('#fCost').value),cur:$('#fCur').value,memo:$('#fMemo').value.trim(),lat:loc?loc.lat:undefined,lng:loc?loc.lng:undefined,
-      via:(v.mode||v.line||v.mins||v.cost)?v:null,det:Object.fromEntries(Object.entries(det).filter(([k,x])=>x&&((FIELDS[cat]||[]).some(f=>f[0]===k)||['resno','phone','addr','link'].includes(k)))),resv,prio,
+      via:(v.mode||v.line||v.mins||v.cost)?v:null,det:Object.fromEntries(Object.entries(det).filter(([k,x])=>x&&((FIELDS[cat]||[]).some(f=>f[0]===k)||['resno','phone','addr','link'].includes(k)))),resv,prio,pay,
       cityId:$('#fDate').value?(d.cityId||''):$('#fCity').value,
       tix:{links:tix.links.filter(l=>l.url),files:tix.files,holder:tix.holder,count:tix.count}};
   };
@@ -1670,6 +1709,9 @@ document.addEventListener('click',e=>{
   const mc=e.target.closest('[data-mc]');if(mc){mapCity=mc.dataset.mc;mapDay='all';renderMap();renderRecMarkers();return}
   const tx=e.target.closest('[data-tix]');if(tx){e.stopPropagation();map&&map.closePopup();const today=iso(new Date());const ids=tx.dataset.tday?sorted(sched().filter(i=>i.date===today&&hasTix(i))).map(i=>i.id):tixList().map(i=>i.id);openTicket(tx.dataset.tix,ids);return}
   const tn=e.target.closest('[data-tnav]');if(tn){const ids=[...document.querySelectorAll('[data-tnav]')].length?null:null;const cur=tixList().map(i=>i.id);openTicket(tn.dataset.tnav,window._tvIds||cur);return}
+  const bkf=e.target.closest('[data-bkf]');if(bkf){bkF=bkf.dataset.bkf;renderBook();return}
+  const cr=e.target.closest('[data-cycr]');if(cr){const it=trip.items.find(x=>x.id===cr.dataset.cycr);if(it){const o=['','need','done'];it.resv=o[(o.indexOf(it.resv||'')+1)%3];save();renderBook();renderHead();todoBadge()}return}
+  const cyp=e.target.closest('[data-cycp]');if(cyp){const it=trip.items.find(x=>x.id===cyp.dataset.cycp);if(it){const o=['','unpaid','onsite','paid'];it.pay=o[(o.indexOf(it.pay||'')+1)%4];save();renderBook()}return}
   const as=e.target.closest('[data-addstay]');if(as){const d=as.dataset.addstay;const n=d?(()=>{const x=parseD(d);x.setDate(x.getDate()+1);return iso(x)})():'';openForm(newItem(d,{cat:'stay',start:'15:00',det:{outDate:n,outTime:'11:00'}}));return}
   const vg=e.target.closest('[data-v-go]');if(vg){setView(vg.dataset.vGo);return}
   const tg=e.target.closest('[data-tg]');if(tg){tdGroup=tg.dataset.tg;renderTodo();return}
