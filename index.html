@@ -353,6 +353,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
       <div><span id="cloudPill" class="cloud" hidden></span></div>
     </div>
     <div class="head-actions">
+      <button class="btn" id="bTrips">내 여행</button>
       <button class="btn" id="bShare">공유</button>
       <button class="btn" id="bWallet">티켓함</button>
       <button class="btn" id="bSettings">여행 정보 · 환율 · 저장</button>
@@ -500,7 +501,16 @@ let view='route';try{view=localStorage.getItem(KEY+'.view')||'route'}catch(e){}
 if(!['route','todo','stays','timeline','list','places','budget','recs'].includes(view))view='route';
 let mapCity='all',mapDay='all',picking=null,selId=null,sampleFn=null,recs=[],recCtl=null;
 const DEVICE=uid();let dbApi=null,uidV=null,isOwnerV=false,assetsFn=null,cloudOn=false,pushT=null,pushing=Promise.resolve();
-function localSave(){try{localStorage.setItem(KEY,JSON.stringify(trip))}catch(e){}}
+function localSave(){try{localStorage.setItem(KEY,JSON.stringify(trip))}catch(e){}
+  try{if(!COLLAB&&!SHARED&&!trip.isSample&&!trip._loading){if(!trip.localId)trip.localId=uid();localStorage.setItem('tripPlanner.local.'+trip.localId,JSON.stringify(trip));localStorage.setItem(KEY,JSON.stringify(trip))}}catch(e){}
+  libTouch()}
+/* 내 여행 목록 (이 기기) */
+const LIBK='tripPlanner.library';
+function libGet(){try{return JSON.parse(localStorage.getItem(LIBK))||[]}catch(e){return []}}
+function libSet(l){try{localStorage.setItem(LIBK,JSON.stringify(l))}catch(e){}}
+function libUpsert(e){const l=libGet().filter(x=>!(x.kind===e.kind&&x.id===e.id));l.unshift({...e,updatedAt:Date.now()});libSet(l.slice(0,60))}
+function libTouch(){if(trip._loading||trip.isSample)return;let e=null;if(COLLAB)e={kind:'cloud',id:COLLAB};else if(!SHARED&&trip.localId)e={kind:'local',id:trip.localId};if(!e)return;
+  const l=libGet(),o=l.find(x=>x.kind===e.kind&&x.id===e.id);if(o&&o.title===trip.title&&o.start===trip.start&&o.end===trip.end)return;libUpsert({...e,title:trip.title,start:trip.start,end:trip.end})}
 function save(){trip.updatedAt=Date.now();localSave();if(COLLAB&&!trip._loading){clearTimeout(fbT);fbT=setTimeout(fbPush,600);fbState='saving';renderCloud()}if(dbApi&&uidV&&!SHARED){clearTimeout(pushT);pushT=setTimeout(pushNow,700)}}
 function pushNow(){if(!dbApi||!uidV)return;const body={trip:JSON.parse(JSON.stringify(trip)),updatedAt:trip.updatedAt||Date.now(),device:DEVICE};
   pushing=pushing.then(()=>dbApi.doc('data/users/'+uidV+'/trip').set(body)).then(()=>{cloudOn=true;renderCloud()}).catch(e=>{cloudOn=false;renderCloud();if(e&&e.code==='invalid_argument')toast('일정이 너무 커서 계정에 저장하지 못했어요. 메모를 줄여 주세요')})}
@@ -543,11 +553,12 @@ function initCollab(){
   window.addEventListener('online',()=>{fbPull()});
   document.addEventListener('focusout',()=>{if(fbDeferred){setTimeout(()=>{if(!typing()&&fbDeferred){fbDeferred=false;render(false)}},50)}});
 }
-async function startCollab(){
+async function startCollab(src){
   const id=Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'[b%57]).join('');
-  const t=JSON.parse(JSON.stringify(trip));delete t.isSample;t.items.forEach(i=>{if(i.tix)i.tix.files=[]});
+  const t=JSON.parse(JSON.stringify(src||trip));delete t.isSample;delete t.localId;delete t.fromShare;t.items.forEach(i=>{if(i.tix)i.tix.files=[]});t.updatedAt=Date.now();
   const r=await fetch(`${FB_DB}/trips/${id}.json`,{method:'PUT',body:JSON.stringify(toFB(t))});if(!r.ok)throw new Error('put');
   try{localStorage.setItem('tripPlanner.collab.'+id,JSON.stringify(t))}catch(e){}
+  libUpsert({kind:'cloud',id,title:t.title,start:t.start,end:t.end});
   location.hash='e-'+id;location.reload();
 }
 const collabLink=()=>location.origin+location.pathname+'#e-'+COLLAB;
@@ -1136,6 +1147,75 @@ function renderToday(){
   bar.hidden=false;bar.innerHTML=`<span><b>오늘 쓸 티켓 ${l.length}개</b> · ${l.map(i=>esc(i.place)).join(', ')}</span><button type="button" class="btn small" data-tix="${sorted(l)[0].id}" data-tday="1">바로 보기</button>`;
 }
 
+/* 내 여행 · 새 여행 · 저장/불러오기 */
+const curEntry=()=>COLLAB?{kind:'cloud',id:COLLAB}:(!SHARED&&trip.localId?{kind:'local',id:trip.localId}:null);
+const isCur=e=>{const c=curEntry();return !!c&&c.kind===e.kind&&c.id===e.id};
+async function loadEntry(e){
+  if(isCur(e))return JSON.parse(JSON.stringify(trip));
+  if(e.kind==='local'){const v=localStorage.getItem('tripPlanner.local.'+e.id);if(!v)throw new Error('missing');return migrate(JSON.parse(v))}
+  if(!FB_ON)throw new Error('offline');const r=await fetch(`${FB_DB}/trips/${e.id}.json`);if(!r.ok)throw new Error('fetch');const d=await r.json();if(!d)throw new Error('missing');return fromFB(d);
+}
+function copyTrip(src,newStart,title){
+  const t=JSON.parse(JSON.stringify(src));
+  const off=src.start&&newStart?Math.round((parseD(newStart)-parseD(src.start))/864e5):0;
+  const sh=d=>{if(!d||!off)return d;const x=parseD(d);x.setDate(x.getDate()+off);return iso(x)};
+  t.start=sh(t.start);t.end=sh(t.end);(t.cities||[]).forEach(c=>{c.start=sh(c.start);c.end=sh(c.end)});
+  (t.items||[]).forEach(i=>{i.date=sh(i.date);if(i.det){if(i.det.outDate)i.det.outDate=sh(i.det.outDate);delete i.det.resno}if(i.resv)i.resv='need';i.tix={links:[],files:[],holder:'',count:''}});
+  (t.todos||[]).forEach(x=>{x.done=false;x.due=sh(x.due)});
+  const dn={};Object.entries(t.dayNotes||{}).forEach(([k,v])=>dn[sh(k)]=v);t.dayNotes=dn;
+  ['fromShare','_loading','updatedAt','isSample','localId','shareFrom'].forEach(k=>delete t[k]);
+  t.title=title||t.title;return migrate(t);
+}
+async function createTrip(t){
+  if(FB_ON){await startCollab(t);return}
+  if(!trip.isSample)localSave();
+  t.localId=uid();t.isSample=false;trip=migrate(t);selId=null;recs=[];mapCity='all';mapDay='all';save();render();closeForm();toast('새 여행을 만들었어요');
+}
+function openTrips(){
+  const l=libGet(),c=curEntry();
+  const ov=$('#overlay');
+  ov.innerHTML=`<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center"><h2>내 여행</h2><button type="button" class="btn small" id="trClose">닫기</button></div>
+    <div class="todo" style="margin:0"><b>지금 보고 있는 여행</b><span>${esc(trip.title||'여행')} <span class="hint">${trip.start?fmtD(trip.start)+' – '+fmtD(trip.end||trip.start):''}${COLLAB?' · 같이 편집':SHARED?' · 공유받은 보기 전용':''}</span></span></div>
+    <b>여행 목록 <span class="hint" style="font-weight:500">이 기기에서 열었던 여행</span></b>
+    ${l.length?`<ul class="kv" style="gap:0">${l.map((e,k)=>`<li style="padding:9px 0;border-bottom:1px solid var(--line);align-items:center"><span style="white-space:normal"><b>${esc(e.title||'여행')}</b> ${isCur(e)?'<span class="pill">지금</span>':''}<br><span class="hint">${e.start?fmtD(e.start)+' – '+fmtD(e.end||e.start):'날짜 없음'} · ${e.kind==='cloud'?'같이 편집 링크':'이 기기'}</span></span>
+      <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${isCur(e)?'':`<button type="button" class="btn small primary" data-tropen="${k}">열기</button>`}<button type="button" class="btn small" data-trcopy="${k}">복사해서 새 여행</button>${isCur(e)?'':`<button type="button" class="x" data-trdel="${k}" aria-label="목록에서 빼기" title="목록에서 빼기">×</button>`}</span></li>`).join('')}</ul>`:'<span class="hint">아직 목록에 여행이 없어요. 여행을 만들거나 열면 여기에 쌓여요.</span>'}
+    <hr class="sep"><b>새 여행 만들기</b>
+    <div class="f"><label for="nwTitle">여행 이름</label><input id="nwTitle" placeholder="예: 오사카 2박 3일"></div>
+    <div class="grid2"><div class="f"><label for="nwStart">출발일</label><input type="date" id="nwStart"></div><div class="f"><label for="nwEnd">돌아오는 날</label><input type="date" id="nwEnd"></div></div>
+    <div class="f"><label for="nwFrom">어떻게 시작할까요?</label><select id="nwFrom"><option value="blank">빈 일정에서 시작</option><option value="cur">지금 여행 복사 (${esc(trip.title||'')})</option>${l.filter(e=>!isCur(e)).map(e=>`<option value="lib:${l.indexOf(e)}">${esc(e.title||'여행')} 복사</option>`).join('')}</select>
+      <span class="hint">복사하면 장소·숙소·할 일·메모를 그대로 가져오고, 날짜는 새 출발일에 맞춰 옮겨요. 예약번호·티켓은 빼고, 예약했던 곳은 다시 "예약 필요"로 바뀌어요.</span></div>
+    <div><button type="button" class="btn primary" id="nwGo">새 여행 만들기</button> <span class="st" id="nwSt"></span></div>
+    ${FB_ON?'<span class="hint">새 여행은 새 비밀 링크로 만들어져요. 지금 여행과 그 링크는 그대로 남아서, 전에 같이 갔던 사람의 일정은 바뀌지 않아요.</span>':''}
+    <hr class="sep"><b>파일로 저장 · 불러오기</b><span class="hint">여행을 파일로 저장해 두면 언제든 다시 불러와 새 여행으로 쓸 수 있어요. 다른 기기로 옮길 때도 써요.</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn small" id="trSave">지금 여행을 파일로 저장</button><label class="btn small" for="trFile">파일 불러와서 새 여행으로</label><input type="file" id="trFile" accept=".json,.html,application/json,text/html" hidden></div><span class="st" id="trSt"></span>
+  </div>`;
+  ov.hidden=false;
+  $('#trClose').onclick=closeForm;
+  const setDur=()=>{const v=$('#nwFrom').value;if(v==='blank'||!$('#nwStart').value)return;const src=v==='cur'?trip:l[+v.slice(4)];if(src&&src.start&&src.end){const d=Math.round((parseD(src.end)-parseD(src.start))/864e5);const x=parseD($('#nwStart').value);x.setDate(x.getDate()+d);$('#nwEnd').value=iso(x)}};
+  $('#nwStart').onchange=()=>{if(!$('#nwEnd').value||$('#nwEnd').value<$('#nwStart').value)$('#nwEnd').value=$('#nwStart').value;setDur()};$('#nwFrom').onchange=setDur;
+  $('#nwGo').onclick=async()=>{const st=$('#nwSt'),title=$('#nwTitle').value.trim(),a=$('#nwStart').value,b=$('#nwEnd').value||a,v=$('#nwFrom').value;
+    if(!title){$('#nwTitle').focus();st.textContent='여행 이름을 써 주세요.';return}
+    st.textContent='만드는 중…';$('#nwGo').disabled=true;
+    try{let t;if(v==='blank')t={...blank(),title,start:a||iso(new Date()),end:b||a||iso(new Date())};
+      else{const src=v==='cur'?JSON.parse(JSON.stringify(trip)):await loadEntry(l[+v.slice(4)]);t=copyTrip(src,a||src.start,title);if(a&&b)t.end=b}
+      await createTrip(t);
+    }catch(e){st.textContent='만들지 못했어요. 인터넷 연결을 확인해 주세요.';$('#nwGo').disabled=false}};
+  ov.querySelectorAll('[data-tropen]').forEach(b=>b.onclick=async()=>{const e=l[+b.dataset.tropen];
+    if(e.kind==='cloud'){if(!FB_ON){$('#trSt').textContent='같이 편집 여행은 웹사이트에서 열 수 있어요.';return}location.hash='e-'+e.id;location.reload();return}
+    try{const t=await loadEntry(e);if(COLLAB||SHARED){$('#trSt').textContent='이 기기 여행은 비밀 링크 없이 연 화면에서 열 수 있어요.';return}if(!trip.isSample)localSave();trip=t;selId=null;save();closeForm();render();toast('여행을 열었어요')}catch(x){$('#trSt').textContent='이 여행을 찾지 못했어요.'}});
+  ov.querySelectorAll('[data-trcopy]').forEach(b=>b.onclick=()=>{$('#nwFrom').value=isCur(l[+b.dataset.trcopy])?'cur':'lib:'+b.dataset.trcopy;$('#nwTitle').focus();$('#nwTitle').scrollIntoView({block:'center',behavior:'smooth'})});
+  ov.querySelectorAll('[data-trdel]').forEach(b=>b.onclick=()=>{if(!b.dataset.armed){b.dataset.armed=1;b.textContent='빼기';return}const e=l[+b.dataset.trdel];libSet(libGet().filter(x=>!(x.kind===e.kind&&x.id===e.id)));openTrips();toast(e.kind==='cloud'?'목록에서 뺐어요. 링크가 있으면 다시 열 수 있어요':'목록에서 뺐어요')});
+  $('#trSave').onclick=async()=>{const t=JSON.parse(JSON.stringify(trip));['_loading','fromShare'].forEach(k=>delete t[k]);const data=JSON.stringify({app:'trip-planner',version:2,savedAt:new Date().toISOString(),trip:t},null,1);
+    const name=`trip-${(trip.start||iso(new Date())).replaceAll('-','')}.json`;
+    if(downloadsFn){try{await downloadsFn.save({filename:name,data});$('#trSt').textContent='저장했어요.'}catch(e){$('#trSt').textContent=e&&e.code==='declined'?'저장을 취소했어요.':'여기서는 저장할 수 없어요.'}return}
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);$('#trSt').textContent=`"${name}" 파일로 저장했어요.`};
+  $('#trFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async()=>{const txt=String(r.result);let t=null;
+      try{const m=txt.match(/<script id="sharedTrip" type="application\/json">([\s\S]*?)<\/script>/);if(m)t=JSON.parse(m[1]).trip;else{const o=JSON.parse(txt);t=o.trip||o}}catch(x){}
+      if(!t||!Array.isArray(t.items)){$('#trSt').textContent='여행 파일이 아니에요.';return}
+      t=migrate(t);['localId','fromShare','_loading','isSample'].forEach(k=>delete t[k]);(t.items||[]).forEach(i=>{if(i.tix)i.tix.files=[]});
+      $('#trSt').textContent='불러오는 중…';try{await createTrip(t)}catch(x){$('#trSt').textContent='불러오지 못했어요.'}};r.readAsText(f)};
+}
+
 /* share */
 let downloadsFn=null;
 const b64=blob=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(blob)});
@@ -1525,7 +1605,7 @@ function openSettings(){
     <span class="hint">티켓 사진·PDF는 이 기기의 이 브라우저에만 저장되고, 아래 데이터에는 들어가지 않아요. 입력한 일정은 이 브라우저에 자동 저장돼요. 다른 기기로 옮기거나 백업하려면 아래 내용을 복사해 두세요.</span>
     <div class="f"><label for="sJson">여행 데이터</label><textarea id="sJson" rows="5" class="mono" style="font-size:12px"></textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn small" id="sCopy">복사</button><button type="button" class="btn small" id="sLoad">붙여넣은 내용 불러오기</button><label class="btn small" for="sFile">파일 불러오기 (공유 파일 · 백업)</label><input type="file" id="sFile" accept=".json,.txt,.html,application/json,text/html" hidden></div>
-    <hr class="sep"><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn small danger" id="sNew">새 여행 시작 (모두 지우기)</button><button type="button" class="btn small" id="sSample">예시 일정 보기</button></div>
+    <hr class="sep"><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn small danger" id="sNew">이 여행 비우기 (모두 지우기)</button><button type="button" class="btn small" id="sSample">예시 일정 보기</button></div>
   </form>`;
   ov.hidden=false;
   const rates={...trip.rates};
@@ -1564,6 +1644,7 @@ $('#bAdd').onclick=()=>openForm(newItem(mapDay!=='all'?mapDay:''));
 $('#bSettings').onclick=openSettings;
 $('#bWallet').onclick=openWallet;
 $('#bShare').onclick=openShare;
+$('#bTrips').onclick=openTrips;
 let folded=window.matchMedia('(max-width:900px)').matches;try{const f=localStorage.getItem('tripPlanner.fold');if(f!==null)folded=f==='1'}catch(e){}
 function setFold(v){folded=v;$('#rightPane').classList.toggle('folded',v);$('#bFold').textContent=v?'지도 펼치기':'지도 접기';try{localStorage.setItem('tripPlanner.fold',v?'1':'0')}catch(e){}if(!v&&map)setTimeout(()=>{map.invalidateSize();renderMap()},50)}
 setFold(folded);$('#bFold').onclick=()=>setFold(!folded);
