@@ -26,19 +26,19 @@
   --bg:#f3f5f6; --surface:#ffffff; --surface-2:#e9eef0; --fg:#14232b; --muted:#5d6f78; --line:#d5dee2;
   --accent:#0f6e8c; --accent-fg:#ffffff; --accent-soft:#d9eef4; --warn:#c2410c; --good:#15803d; --star:#b7791f;
   --c-move:#4b6bd6; --c-stay:#8a5bd0; --c-food:#d9622b; --c-see:#16936b; --c-shop:#c43f7c; --c-etc:#7a8790; --c-cafe:#9a6a2f; --c-tour:#0e8a9e; --c-night:#4c46c9; --c-spa:#b0558f;
-  --tile-filter:none; --sea:#c9dfe7; --world-land:#f6f4ee; --world-line:#a9b7bc;
+  --tile-filter:none; --pig:#f4a9bb; --pig-deep:#d9748f; --coin:#efc23a; --coin-edge:#b88a12; --sea:#c9dfe7; --world-land:#f6f4ee; --world-line:#a9b7bc;
   --f-display:"Gowun Batang",serif; --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0e171c; --surface:#16232a; --surface-2:#1f2f37; --fg:#e4ecef; --muted:#93a6ae; --line:#2b3d46;
   --accent:#4cb8d8; --accent-fg:#06222c; --accent-soft:#163a47; --warn:#fb923c; --good:#4ade80; --star:#f6c35b;
   --c-move:#7d97f0; --c-stay:#b18cf0; --c-food:#f08a55; --c-see:#3fc497; --c-shop:#ec6fa6; --c-etc:#9aa8b0; --c-cafe:#d6a06a; --c-tour:#3fc2d4; --c-night:#8f8bf5; --c-spa:#e08cc1;
-  --tile-filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); --sea:#10303b; --world-land:#22303a; --world-line:#46606b; color-scheme:dark}}
+  --tile-filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); --pig:#e08ea3; --pig-deep:#b85d77; --coin:#f2c94c; --coin-edge:#a77d0e; --sea:#10303b; --world-land:#22303a; --world-line:#46606b; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0e171c; --surface:#16232a; --surface-2:#1f2f37; --fg:#e4ecef; --muted:#93a6ae; --line:#2b3d46;
   --accent:#4cb8d8; --accent-fg:#06222c; --accent-soft:#163a47; --warn:#fb923c; --good:#4ade80; --star:#f6c35b;
   --c-move:#7d97f0; --c-stay:#b18cf0; --c-food:#f08a55; --c-see:#3fc497; --c-shop:#ec6fa6; --c-etc:#9aa8b0; --c-cafe:#d6a06a; --c-tour:#3fc2d4; --c-night:#8f8bf5; --c-spa:#e08cc1;
-  --tile-filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); --sea:#10303b; --world-land:#22303a; --world-line:#46606b; color-scheme:dark}
+  --tile-filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); --pig:#e08ea3; --pig-deep:#b85d77; --coin:#f2c94c; --coin-edge:#a77d0e; --sea:#10303b; --world-land:#22303a; --world-line:#46606b; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55}
 .wrap{max-width:1440px;margin:0 auto;padding-inline:16px;padding-block:20px 60px;display:flex;flex-direction:column;gap:16px}
@@ -180,6 +180,30 @@ h1{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);line-height:1.2;m
 .todo li{display:flex;justify-content:space-between;gap:10px;font-size:14px;align-items:center}
 .todo ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .stayline{font-size:12px;color:var(--muted);font-weight:500}
+.pigbox{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:18px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;position:relative;overflow:hidden}
+@media (max-width:620px){.pigbox{grid-template-columns:1fr;text-align:center}}
+.pigwrap{position:relative;max-width:300px;margin:0 auto;width:100%}
+.pigwrap svg{width:100%;height:auto;display:block}
+.pig.wob{animation:wob .6s ease}
+@keyframes wob{0%,100%{transform:rotate(0)}20%{transform:rotate(-5deg)}45%{transform:rotate(4deg)}70%{transform:rotate(-2deg)}}
+.coinfx{position:absolute;width:24px;height:24px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff6c8,var(--coin) 45%,var(--coin-edge));border:2px solid var(--coin-edge);left:50%;top:78%;pointer-events:none;animation:coinout 1s cubic-bezier(.3,.1,.7,1) forwards;font:700 11px var(--f-mono);color:#7a5a00;display:grid;place-items:center}
+@keyframes coinout{0%{transform:translate(-50%,-10px) scale(.5);opacity:0}15%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),130px) rotate(var(--rot));opacity:0}}
+.pignum{font-family:var(--f-mono);font-size:clamp(28px,6vw,40px);font-weight:700;line-height:1.1}
+.pignum.neg{color:var(--warn)}
+.pigmeta{display:flex;flex-direction:column;gap:8px}
+.pigbudget{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pigbudget input{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px;width:150px;font-family:var(--f-mono)}
+@media (max-width:620px){.pigbudget{justify-content:center}}
+.spend{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.spend:first-child{border-top:0}
+.spend .tx{min-width:0;display:flex;flex-direction:column;gap:1px}
+.spend .tx b{font-size:14.5px;font-weight:600}
+.donebtn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);border-radius:8px;padding:5px 10px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.undobtn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;padding:4px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.xadd{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto auto auto;gap:6px}
+@media (max-width:620px){.xadd{grid-template-columns:1fr 1fr}.xadd input:first-child,.xadd button{grid-column:1/-1}}
+.xadd input,.xadd select{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px;min-width:0}
+@media (prefers-reduced-motion:reduce){.coinfx{display:none}}
 .nights{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px}
 .night{border:1px solid var(--line);border-left:4px solid var(--c);border-radius:9px;padding:7px 9px;background:var(--surface);display:flex;flex-direction:column;gap:2px;min-width:0;font-size:12.5px}
 .night b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -375,7 +399,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
         <button class="tab" role="tab" data-v="timeline">타임라인</button>
         <button class="tab" role="tab" data-v="list">일정표 · 교통</button>
         <button class="tab" role="tab" data-v="places">장소 모음</button>
-        <button class="tab" role="tab" data-v="budget">예산</button>
+        <button class="tab" role="tab" data-v="budget">예산 · 저금통</button>
         <button class="tab" role="tab" data-v="recs">주변 추천</button>
       </nav>
       <section id="vRoute" hidden></section>
@@ -490,7 +514,7 @@ function sample(){
 }
 function blank(){const d=iso(new Date());return {title:'새 여행',start:d,end:d,people:1,budget:0,currency:'KRW',rates:{},isSample:false,cities:[],items:[]}}
 function migrate(t){
-  t.currency=t.currency||'KRW';t.rates=t.rates||{};t.cities=Array.isArray(t.cities)?t.cities:[];t.todos=Array.isArray(t.todos)?t.todos:[];t.cities.forEach(c=>{c.id=c.id||uid()});
+  t.currency=t.currency||'KRW';t.rates=t.rates||{};t.cities=Array.isArray(t.cities)?t.cities:[];t.todos=Array.isArray(t.todos)?t.todos:[];t.expenses=Array.isArray(t.expenses)?t.expenses:[];t.cities.forEach(c=>{c.id=c.id||uid()});
   t.items.forEach(i=>{i.id=i.id||uid();i.cur=i.cur||'KRW';if(i.via===undefined)i.via=null});return t;
 }
 let trip=null;
@@ -522,11 +546,11 @@ let fbT=null,fbLast=null,fbState='',fbChain=Promise.resolve(),fbDeferred=false;
 const fbUrl=()=>`${FB_DB}/trips/${COLLAB}.json`;
 const asObj=a=>Object.fromEntries((a||[]).filter(x=>x&&x.id).map(x=>[x.id,JSON.parse(JSON.stringify(x))]));
 function toFB(t){const meta={};['title','start','end','people','budget','currency','rates','updatedAt'].forEach(k=>{if(t[k]!==undefined)meta[k]=JSON.parse(JSON.stringify(t[k]))});
-  return {meta,items:asObj(t.items),todos:asObj(t.todos),cities:asObj(t.cities),dayNotes:JSON.parse(JSON.stringify(t.dayNotes||{}))}}
-function fromFB(d){d=d||{};const m=d.meta||{};const t={title:'여행',start:'',end:'',people:1,budget:0,currency:'KRW',rates:{},...m,items:Object.values(d.items||{}),todos:Object.values(d.todos||{}),cities:Object.values(d.cities||{}),dayNotes:d.dayNotes||{},isSample:false};
+  return {meta,items:asObj(t.items),todos:asObj(t.todos),cities:asObj(t.cities),expenses:asObj(t.expenses),dayNotes:JSON.parse(JSON.stringify(t.dayNotes||{}))}}
+function fromFB(d){d=d||{};const m=d.meta||{};const t={title:'여행',start:'',end:'',people:1,budget:0,currency:'KRW',rates:{},...m,items:Object.values(d.items||{}),todos:Object.values(d.todos||{}),cities:Object.values(d.cities||{}),expenses:Object.values(d.expenses||{}),dayNotes:d.dayNotes||{},isSample:false};
   t.items.forEach(i=>{if(i.tix){i.tix.links=i.tix.links||[];i.tix.files=i.tix.files||[]}if(!i.det)i.det={}});return migrate(t)}
-function fbKeys(fb){const o={meta:JSON.stringify(fb.meta||{}),dayNotes:JSON.stringify(fb.dayNotes||{})};['items','todos','cities'].forEach(c=>Object.entries(fb[c]||{}).forEach(([id,v])=>o[c+'/'+id]=JSON.stringify(v)));return o}
-function fbFromKeys(k){const o={meta:{},items:{},todos:{},cities:{},dayNotes:{}};Object.entries(k).forEach(([p,v])=>{if(v===undefined)return;const val=JSON.parse(v);if(p==='meta'||p==='dayNotes')o[p]=val;else{const [c,id]=p.split('/');o[c][id]=val}});return o}
+function fbKeys(fb){const o={meta:JSON.stringify(fb.meta||{}),dayNotes:JSON.stringify(fb.dayNotes||{})};['items','todos','cities','expenses'].forEach(c=>Object.entries(fb[c]||{}).forEach(([id,v])=>o[c+'/'+id]=JSON.stringify(v)));return o}
+function fbFromKeys(k){const o={meta:{},items:{},todos:{},cities:{},expenses:{},dayNotes:{}};Object.entries(k).forEach(([p,v])=>{if(v===undefined)return;const val=JSON.parse(v);if(p==='meta'||p==='dayNotes')o[p]=val;else{const [c,id]=p.split('/');o[c][id]=val}});return o}
 function fbPush(){fbChain=fbChain.then(async()=>{
   if(!fbLast)return;const cur=fbKeys(toFB(trip)),patch={};
   Object.keys(cur).forEach(k=>{if(cur[k]!==fbLast[k])patch[k]=JSON.parse(cur[k])});Object.keys(fbLast).forEach(k=>{if(!(k in cur))patch[k]=null});
@@ -657,7 +681,7 @@ function renderHead(){
     (n?`<span>${n>1?(n-1)+'박 ':''}${n}일</span>`:'')+`<span>${trip.people||1}명</span>`+
     (cs.length?`<span>${cs.map(c=>esc(c.name)).join(' → ')}</span>`:'')+
     (dd?`<span class="pill">${dd}</span>`:'')+(trip.isSample?`<span class="pill grey">예시 일정</span>`:'')+(trip.fromShare?`<span class="pill grey">${esc(trip.fromShare)}님이 공유한 일정</span>`:'')+(SHARED?`<span class="pill grey">공유받은 일정${SHARED.from?' · '+esc(SHARED.from):''} · ${esc((SHARED.at||'').slice(5,10).replace('-','/'))} 보냄</span>`:'');
-  const total=sched().reduce((s,i)=>s+itemKRW(i),0),b=+trip.budget||0,pct=b?total/b*100:0;
+  const total=sched().reduce((s,i)=>s+itemKRW(i),0)+xSum(),b=+trip.budget||0,pct=b?total/b*100:0;
   const transit=sched().reduce((s,i)=>s+(i.via?krw(i.via.cost,i.via.cur):0),0);
   const miss=sched().some(i=>(+i.cost&&missingRate(i.cur))||(i.via&&+i.via.cost&&missingRate(i.via.cur)));
   let dist=0;days.forEach(d=>{const l=itemsOf(d).filter(hasLoc);for(let k=1;k<l.length;k++)dist+=km(l[k-1],l[k])});
@@ -837,9 +861,70 @@ function focusItem(id){
 }
 
 /* budget */
+const xSum=()=>(trip.expenses||[]).reduce((s,x)=>s+krw(x.amount,x.cur),0);
+const DONE_LABEL={move:'탑승 완료',stay:'체크인 완료',food:'먹었어요',cafe:'먹었어요',see:'관광 완료',tour:'투어 완료',shop:'구매 완료',night:'다녀왔어요',spa:'이용 완료',etc:'완료'};
+const spentItems=()=>sched().filter(i=>i.pay==='paid'&&itemKRW(i)>0);
+const spentNow=()=>spentItems().reduce((s,i)=>s+itemKRW(i),0)+xSum();
+let pigPrev=null;
+function pigSvg(ratio,over){
+  const r=Math.max(0,Math.min(1,ratio)),top=38,h=124,y=top+(1-r)*h;
+  const coins=[];for(let row=0;row<9;row++)for(let col=0;col<9;col++){const cx=48+col*19+(row%2?9:0),cy=150-row*14;if(cy>=y-4)coins.push(`<circle cx="${cx}" cy="${cy}" r="8" fill="var(--coin)" stroke="var(--coin-edge)" stroke-width="1.5"/>`)}
+  return `<svg viewBox="0 0 240 190" role="img" aria-label="돼지저금통, 남은 예산 ${Math.round(r*100)}%">
+    <defs><clipPath id="pigBody"><ellipse cx="120" cy="100" rx="84" ry="62"/></clipPath></defs>
+    <g class="pig">
+      <path d="M38 96 q-22 -4 -16 -20 q6 -10 14 0 q4 8 -6 12" fill="none" stroke="var(--pig-deep)" stroke-width="4" stroke-linecap="round"/>
+      <rect x="62" y="146" width="18" height="26" rx="7" fill="var(--pig-deep)"/><rect x="94" y="150" width="18" height="24" rx="7" fill="var(--pig-deep)"/>
+      <rect x="132" y="150" width="18" height="24" rx="7" fill="var(--pig-deep)"/><rect x="162" y="146" width="18" height="26" rx="7" fill="var(--pig-deep)"/>
+      <ellipse cx="120" cy="100" rx="84" ry="62" fill="var(--pig)" opacity="${over?.75:1}"/>
+      <g clip-path="url(#pigBody)" opacity=".92"><rect x="30" y="${y}" width="180" height="${170-y}" fill="color-mix(in srgb,var(--coin) 35%,transparent)"/>${coins.join('')}</g>
+      <ellipse cx="120" cy="100" rx="84" ry="62" fill="none" stroke="var(--pig-deep)" stroke-width="3"/>
+      <path d="M72 52 L80 18 L104 44 Z" fill="var(--pig)" stroke="var(--pig-deep)" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M150 44 L172 20 L176 54 Z" fill="var(--pig)" stroke="var(--pig-deep)" stroke-width="3" stroke-linejoin="round"/>
+      <ellipse cx="206" cy="104" rx="18" ry="22" fill="var(--pig)" stroke="var(--pig-deep)" stroke-width="3"/>
+      <ellipse cx="201" cy="98" rx="3" ry="5" fill="var(--pig-deep)"/><ellipse cx="212" cy="98" rx="3" ry="5" fill="var(--pig-deep)"/>
+      ${over?`<path d="M168 76 l10 8 M178 76 l-10 8" stroke="#3a2a2e" stroke-width="3" stroke-linecap="round"/><path d="M160 128 q12 -8 24 0" fill="none" stroke="#3a2a2e" stroke-width="3" stroke-linecap="round"/>`
+        :`<circle cx="173" cy="80" r="5" fill="#3a2a2e"/><path d="M158 124 q12 ${r>.3?10:2} 26 0" fill="none" stroke="#3a2a2e" stroke-width="3" stroke-linecap="round"/>`}
+      <rect x="98" y="37" width="44" height="8" rx="4" fill="var(--pig-deep)"/>
+    </g></svg>`;
+}
+function pigDrop(amount,budget){
+  const wrap=$('#pigWrap');if(!wrap||window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const pig=wrap.querySelector('.pig');if(pig){pig.style.transformOrigin='120px 100px';pig.classList.remove('wob');void pig.getBBox();pig.classList.add('wob')}
+  const n=Math.max(1,Math.min(7,Math.ceil(amount/Math.max(1,(budget||amount)/12))));
+  for(let k=0;k<n;k++){const c=document.createElement('div');c.className='coinfx';c.textContent='₩';c.style.setProperty('--dx',(Math.random()*160-80)+'px');c.style.setProperty('--rot',(Math.random()*540-270)+'deg');c.style.animationDelay=(k*90)+'ms';wrap.appendChild(c);setTimeout(()=>c.remove(),1300+k*90)}
+}
+function countTo(el,from,to){if(!el)return;if(from===null||from===to||window.matchMedia('(prefers-reduced-motion: reduce)').matches){el.textContent=won(to);return}
+  const t0=performance.now(),d=700;const step=t=>{const p=Math.min(1,(t-t0)/d),v=from+(to-from)*(1-Math.pow(1-p,3));el.textContent=won(v);if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
+function pigHtml(){
+  const b=+trip.budget||0,spent=spentNow(),left=b-spent,planned=sched().reduce((s,i)=>s+itemKRW(i),0)+xSum();
+  const todo=sorted(sched().filter(i=>i.pay!=='paid'&&itemKRW(i)>0));
+  const done=sorted(spentItems()),xs=(trip.expenses||[]).slice().sort((a,c)=>(c.date||'').localeCompare(a.date||''));
+  const today=iso(new Date()),dc=defaultCur(today>=trip.start&&today<=trip.end?today:(trip.start||today));
+  return `<div class="pigbox"><div class="pigwrap" id="pigWrap">${pigSvg(b?left/b:0,b&&left<0)}</div>
+    <div class="pigmeta"><span class="hint">저금통에 남은 돈</span><div class="pignum ${left<0?'neg':''}" id="pigNum" data-v="${left}">${won(left)}</div>
+      <span class="hint">${b?`예산 ${won(b)} 중 ${won(spent)} 썼어요 (${Math.round(spent/b*100)}%)`:'예산을 넣으면 저금통이 채워져요'}</span>
+      ${b?`<span class="hint">계획대로 다 쓰면 ${planned<=b?`<b style="color:var(--good)">${won(b-planned)} 남아요</b>`:`<b style="color:var(--warn)">${won(planned-b)} 모자라요</b>`}</span>`:''}
+      ${b&&left<0?'<b style="color:var(--warn)">저금통이 텅 비었어요! 예산을 넘었어요.</b>':''}
+      <div class="pigbudget"><label for="pigB" class="flabel">전체 예산</label><input id="pigB" inputmode="numeric" value="${b?fmtIn(b):''}" placeholder="예: 3,000,000"><span>원</span><button type="button" class="btn small primary" id="pigSet">넣기</button></div></div></div>
+  <div class="panel" style="margin-bottom:14px"><h3>즉석 지출 넣기 <span class="hint" style="font-weight:500">일정에 없는 길거리 간식, 기념품, 택시 등</span></h3>
+    <div class="xadd"><input id="xLabel" placeholder="예: 젤라또 2개" aria-label="내용"><input id="xAmt" inputmode="decimal" placeholder="금액" aria-label="금액"><select id="xCur" aria-label="통화">${curOptions(dc)}</select><select id="xCat" aria-label="분류">${Object.entries(CATS).filter(([k])=>k!=='stay').map(([k,c])=>`<option value="${k}" ${k==='food'?'selected':''}>${c.label}</option>`).join('')}</select><button type="button" class="btn primary small" id="xAdd">빼기</button></div></div>
+  <div class="td-group"><span>쓸 예정 <span class="hint" style="font-weight:500">다 하면 버튼을 눌러요. 저금통에서 돈이 빠져요</span></span><span class="mono hint">${won(todo.reduce((s,i)=>s+itemKRW(i),0))}</span></div>
+  ${todo.length?`<div class="td-list">${todo.map(i=>`<div class="spend"><div class="tx"><b>${esc(i.place)}</b><span class="hint">${fmtD(i.date)} ${esc(i.start||'')} · ${(CATS[i.cat]||CATS.etc).label}${i.pay==='onsite'?' · 현장 결제':''}</span></div><span class="mono">${won(itemKRW(i))}</span><button type="button" class="donebtn" data-pigdone="${i.id}">${i.resv==='need'?'예약·결제 완료':(DONE_LABEL[i.cat]||'완료')}</button></div>`).join('')}</div>`:'<div class="hint" style="padding:8px 2px">쓸 예정인 돈이 없어요.</div>'}
+  <div class="td-group"><span>이미 쓴 돈</span><span class="mono hint">${won(spent)}</span></div>
+  ${done.length||xs.length?`<div class="td-list">${xs.map(x=>`<div class="spend"><div class="tx"><b>${esc(x.label||'지출')}</b><span class="hint">${x.date?fmtD(x.date)+' · ':''}즉석 지출 · ${(CATS[x.cat]||CATS.etc).label}${x.cur!=='KRW'?' · '+money(x.amount,x.cur):''}</span></div><span class="mono">−${won(krw(x.amount,x.cur))}</span><button type="button" class="undobtn" data-xdel="${x.id}">지우기</button></div>`).join('')}${done.map(i=>`<div class="spend"><div class="tx"><b>${esc(i.place)}</b><span class="hint">${fmtD(i.date)} · ${(CATS[i.cat]||CATS.etc).label}</span></div><span class="mono">−${won(itemKRW(i))}</span><button type="button" class="undobtn" data-pigundo="${i.id}">되돌리기</button></div>`).join('')}</div>`:'<div class="hint" style="padding:8px 2px">아직 쓴 돈이 없어요.</div>'}
+  <h3 style="margin:22px 0 10px;font-size:15px">어디에 얼마나 (계획 기준)</h3>`;
+}
+function bindPig(){
+  const num=$('#pigNum');if(num){const v=+num.dataset.v;countTo(num,pigPrev,v);if(pigPrev!==null&&v<pigPrev)pigDrop(pigPrev-v,+trip.budget||0);pigPrev=v}
+  if($('#pigSet'))$('#pigSet').onclick=()=>{trip.budget=numIn($('#pigB').value);save();pigPrev=null;renderBudget();renderHead();toast('예산을 넣었어요')};
+  if($('#pigB'))$('#pigB').oninput=e=>e.target.value=fmtIn(e.target.value);
+  if($('#xAmt'))$('#xAmt').oninput=e=>e.target.value=fmtIn(e.target.value);
+  if($('#xAdd'))$('#xAdd').onclick=()=>{const a=numIn($('#xAmt').value);if(!a){$('#xAmt').focus();return}
+    trip.expenses=trip.expenses||[];trip.expenses.push({id:uid(),label:$('#xLabel').value.trim()||'즉석 지출',amount:a,cur:$('#xCur').value,cat:$('#xCat').value,date:iso(new Date())});save();renderBudget();renderHead()};
+}
 function renderBudget(){
   const el=$('#vBudget'),days=dayList();
-  if(!trip.items.length){el.innerHTML=emptyHtml();return}
+  if(!trip.items.length&&!(trip.expenses||[]).length){el.innerHTML=pigHtml()+emptyHtml();bindPig();return}
   const total=sched().reduce((s,i)=>s+itemKRW(i),0);
   const catSum=k=>sched().reduce((s,i)=>s+((i.cat||'etc')===k?krw(i.cost,i.cur):0)+(k==='move'&&i.via?krw(i.via.cost,i.via.cur):0),0);
   const byCat=Object.keys(CATS).map(k=>({k,v:catSum(k)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v),maxC=Math.max(1,...byCat.map(x=>x.v));
@@ -847,7 +932,7 @@ function renderBudget(){
   const top=sched().filter(i=>krw(i.cost,i.cur)>0).sort((a,b)=>krw(b.cost,b.cur)-krw(a.cost,a.cur)).slice(0,6);
   const byCur={};trip.items.forEach(i=>{if(+i.cost)byCur[i.cur]=(byCur[i.cur]||0)+(+i.cost);if(i.via&&+i.via.cost)byCur[i.via.cur]=(byCur[i.via.cur]||0)+(+i.via.cost)});
   const b=+trip.budget||0;
-  el.innerHTML=`<div class="budget">
+  el.innerHTML=pigHtml()+`<div class="budget">
     <div class="panel"><h3>항목별 (원화)</h3>${byCat.map(x=>`<div class="bar-row"><span><i class="dot" style="background:var(${CATS[x.k].v})"></i> ${CATS[x.k].label}</span><div class="bar"><i style="width:${x.v/maxC*100}%;background:var(${CATS[x.k].v})"></i></div><span class="n">${won(x.v)}</span></div>`).join('')||'<span class="hint">금액이 들어간 일정이 없어요</span>'}
       ${total?`<span class="hint">비중: ${byCat.map(x=>`${CATS[x.k].label} ${(x.v/total*100).toFixed(0)}%`).join(' · ')}<br>교통에는 일정 사이 이동 요금도 포함돼요.</span>`:''}</div>
     <div class="panel"><h3>날짜별</h3>${byDay.map(x=>`<div class="bar-row"><span>${x.i+1}일차 <span class="hint">${fmtD(x.d).split(' ')[0]}</span></span><div class="bar"><i style="width:${x.v/maxD*100}%;background:${dayColor(x.i)}"></i></div><span class="n">${won(x.v)}</span></div>`).join('')}
@@ -862,6 +947,7 @@ function renderBudget(){
         <li><span>${b&&total>b?'초과':'남은 돈'}</span><span class="mono" style="color:${b&&total>b?'var(--warn)':'var(--good)'}">${b?won(Math.abs(b-total)):'–'}</span></li>
         <li><span>1인당 (${trip.people||1}명)</span><span class="mono">${won(total/(trip.people||1))}</span></li></ul></div>
   </div>`;
+  bindPig();
 }
 
 /* recommendations */
@@ -1164,7 +1250,7 @@ function copyTrip(src,newStart,title){
   const sh=d=>{if(!d||!off)return d;const x=parseD(d);x.setDate(x.getDate()+off);return iso(x)};
   t.start=sh(t.start);t.end=sh(t.end);(t.cities||[]).forEach(c=>{c.start=sh(c.start);c.end=sh(c.end)});
   (t.items||[]).forEach(i=>{i.date=sh(i.date);if(i.det){if(i.det.outDate)i.det.outDate=sh(i.det.outDate);delete i.det.resno}if(i.resv)i.resv='need';if(i.pay)i.pay='';i.tix={links:[],files:[],holder:'',count:''}});
-  (t.todos||[]).forEach(x=>{x.done=false;x.due=sh(x.due)});
+  (t.todos||[]).forEach(x=>{x.done=false;x.due=sh(x.due)});t.expenses=[];
   const dn={};Object.entries(t.dayNotes||{}).forEach(([k,v])=>dn[sh(k)]=v);t.dayNotes=dn;
   ['fromShare','_loading','updatedAt','isSample','localId','shareFrom'].forEach(k=>delete t[k]);
   t.title=title||t.title;return migrate(t);
@@ -1709,6 +1795,9 @@ document.addEventListener('click',e=>{
   const mc=e.target.closest('[data-mc]');if(mc){mapCity=mc.dataset.mc;mapDay='all';renderMap();renderRecMarkers();return}
   const tx=e.target.closest('[data-tix]');if(tx){e.stopPropagation();map&&map.closePopup();const today=iso(new Date());const ids=tx.dataset.tday?sorted(sched().filter(i=>i.date===today&&hasTix(i))).map(i=>i.id):tixList().map(i=>i.id);openTicket(tx.dataset.tix,ids);return}
   const tn=e.target.closest('[data-tnav]');if(tn){const ids=[...document.querySelectorAll('[data-tnav]')].length?null:null;const cur=tixList().map(i=>i.id);openTicket(tn.dataset.tnav,window._tvIds||cur);return}
+  const pd=e.target.closest('[data-pigdone]');if(pd){const it=trip.items.find(x=>x.id===pd.dataset.pigdone);if(it){it.pay='paid';if(it.resv==='need')it.resv='done';save();renderBudget();renderHead();todoBadge();toast(`${it.place} · ${won(itemKRW(it))} 빠졌어요`)}return}
+  const pu=e.target.closest('[data-pigundo]');if(pu){const it=trip.items.find(x=>x.id===pu.dataset.pigundo);if(it){it.pay='';save();renderBudget();renderHead()}return}
+  const xd=e.target.closest('[data-xdel]');if(xd){trip.expenses=(trip.expenses||[]).filter(x=>x.id!==xd.dataset.xdel);save();renderBudget();renderHead();return}
   const bkf=e.target.closest('[data-bkf]');if(bkf){bkF=bkf.dataset.bkf;renderBook();return}
   const cr=e.target.closest('[data-cycr]');if(cr){const it=trip.items.find(x=>x.id===cr.dataset.cycr);if(it){const o=['','need','done'];it.resv=o[(o.indexOf(it.resv||'')+1)%3];save();renderBook();renderHead();todoBadge()}return}
   const cyp=e.target.closest('[data-cycp]');if(cyp){const it=trip.items.find(x=>x.id===cyp.dataset.cycp);if(it){const o=['','unpaid','onsite','paid'];it.pay=o[(o.indexOf(it.pay||'')+1)%4];save();renderBook()}return}
