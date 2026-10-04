@@ -413,7 +413,7 @@ hr.sep{border:0;border-top:1px solid var(--line);width:100%;margin:4px 0}
       <section id="vRecs" hidden></section>
     </div>
     <aside class="right" id="rightPane">
-      <div class="map-bar"><div class="daychips" id="mapCities"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" id="bClearRecs" hidden>추천 표시 지우기</button><button class="btn small" id="bTiles">지도 바꾸기</button><button class="btn small" id="bFold">지도 펼치기</button></div></div>
+      <div class="map-bar"><div class="daychips" id="mapCities"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" id="bClearRecs" hidden>추천 표시 지우기</button><button class="btn small primary" id="bGeo" hidden title="주소나 장소 이름으로 위치가 없는 일정을 지도에 표시해요">📍 위치 찾기</button><button class="btn small" id="bTiles">지도 바꾸기</button><button class="btn small" id="bFold">지도 펼치기</button></div></div>
       <div class="daychips" id="mapDays"></div>
       <div class="mapbox"><div id="map"></div><div class="map-note" id="mapNote" hidden></div></div>
       <div class="legend" id="mapLegend"></div>
@@ -819,6 +819,7 @@ function mapSel(){
   return {days,ds,c};
 }
 function renderMap(fit){
+  geoBtn();
   const {days,ds,c}=mapSel(),cs=cities();
   $('#mapCities').innerHTML=cs.length?`<button class="daychip" data-mc="all" aria-pressed="${mapCity==='all'}">전체 경로</button>`+cs.map(x=>`<button class="daychip" data-mc="${x.id}" aria-pressed="${mapCity===x.id}"><i class="dot" style="background:${cityColor(x)}"></i>${esc(x.name)}</button>`).join(''):'';
   const dayPool=c?days.filter(d=>d>=c.start&&d<=(c.end||c.start)):days;
@@ -1032,6 +1033,41 @@ async function geocode(q){
   const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=ko&q='+encodeURIComponent(q));
   if(!r.ok)throw new Error('geo');return await r.json();
 }
+let geoLast=0;
+async function geoOne(q){const w=1100-(Date.now()-geoLast);if(w>0)await new Promise(r=>setTimeout(r,w));geoLast=Date.now();
+  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),8000);
+  try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q='+encodeURIComponent(q),{signal:ctl.signal});if(!r.ok)throw new Error('geo');const js=await r.json();return js[0]?{lat:+(+js[0].lat).toFixed(5),lng:+(+js[0].lon).toFixed(5)}:null}finally{clearTimeout(t)}}
+function geoQueries(it){const c=cityOf(it)||cities().find(x=>x.id===it.cityId),ctx=c?[c.name,c.country].filter(Boolean).join(' '):'',a=((it.det||{}).addr||'').trim(),q=[];
+  if(a){q.push(a);const short=a.replace(/\(.*?\)/g,'').split(',').slice(0,3).join(',').trim();if(short&&short!==a)q.push(short);if(ctx&&!a.includes(c.name))q.push(a+' '+ctx)}
+  const pl=(it.place||'').replace(/\(.*?\)/g,'').trim();if(pl&&ctx)q.push(pl+' '+ctx);
+  return [...new Set(q)].slice(0,4)}
+function geoNear(it,p){const c=cityOf(it)||cities().find(x=>x.id===it.cityId);return !p||!c||!hasLoc(c)||km(c,p)<300?p:null}
+async function geoFind(it){let blocked=0;const qs=geoQueries(it);
+  for(const q of qs){try{const p=geoNear(it,await geoOne(q));if(p)return p}catch(e){blocked++;break}}
+  if(blocked&&sampleFn){try{const r=await geoClaude([it]);return r[it.id]||null}catch(e){}}
+  if(blocked)throw new Error('blocked');return null}
+async function geoClaude(list){
+  const rows=list.map(i=>{const c=cityOf(i)||cities().find(x=>x.id===i.cityId);return{id:i.id,place:i.place,addr:(i.det||{}).addr||'',city:c?[c.name,c.country].filter(Boolean).join(', '):''}});
+  const out=await sampleFn.json('다음 장소들의 위도·경도를 알려줘. 주소가 있으면 주소 기준. 모르면 빼. JSON 객체로만 답해: {"<id>":{"lat":숫자,"lng":숫자}}\n'+JSON.stringify(rows),{modelTier:'quick'});
+  const res={};if(out&&typeof out==='object')for(const k in out){const v=out[k];if(v&&isFinite(parseFloat(v.lat))&&isFinite(parseFloat(v.lng)))res[k]={lat:+parseFloat(v.lat).toFixed(5),lng:+parseFloat(v.lng).toFixed(5)}}
+  return res}
+const noLoc=()=>trip.items.filter(i=>!hasLoc(i)&&(i.cat!=='move'||((i.det||{}).addr||'').trim())&&geoQueries(i).length);
+let geoBusy=false;
+async function geoAll(){if(geoBusy)return;const list=noLoc();if(!list.length){toast('위치가 없는 일정이 없어요');return}
+  geoBusy=true;const b=$('#bGeo');b.disabled=true;let ok=0,miss=[],blocked=false;
+  try{
+    for(let k=0;k<list.length;k++){const it=list[k];b.textContent=`위치 찾는 중 ${k+1}/${list.length}`;
+      let p=null;try{for(const q of geoQueries(it)){p=geoNear(it,await geoOne(q));if(p)break}}catch(e){blocked=true;break}
+      if(p){const cur=trip.items.find(x=>x.id===it.id);if(cur&&!hasLoc(cur)){cur.lat=p.lat;cur.lng=p.lng;ok++}}else miss.push(it.place)}
+    if(blocked){
+      if(!sampleFn){toast('여기서는 주소 검색이 막혀 있어요. 웹사이트 주소로 열어서 눌러 주세요.');return}
+      b.textContent='Claude에게 위치를 묻는 중…';const left=noLoc();const r=await geoClaude(left);miss=[];
+      left.forEach(i=>{const p=r[i.id];if(p){i.lat=p.lat;i.lng=p.lng;ok++}else miss.push(i.place)})}
+    if(ok){trip.isSample=false;save();render(false);renderMap(true)}
+    toast(ok?`${ok}곳을 지도에 표시했어요${miss.length?` · 못 찾은 곳 ${miss.length}개: ${miss.slice(0,3).join(', ')}${miss.length>3?' 외':''} (주소를 더 자세히 써 보세요)`:''}`:'위치를 찾지 못했어요. 주소를 영어나 현지어로 써 보세요.')
+  }catch(e){toast('위치를 찾지 못했어요. 잠시 뒤 다시 눌러 주세요.')}
+  finally{geoBusy=false;b.disabled=false;geoBtn()}}
+function geoBtn(){const b=$('#bGeo');if(!b)return;const n=noLoc().length;b.hidden=!n;b.textContent=`📍 위치 찾기 (${n})`}
 async function recsOSM(area,a,st){
   st.textContent='근처 장소를 찾는 중이에요…';
   let c=a;
@@ -1559,7 +1595,7 @@ function openForm(item,keep){
       <div class="results" id="fResults"></div>
       <div class="loc-row"><input class="inp" id="fCoord" placeholder="좌표나 구글 지도 링크 붙여넣기" value="${loc?loc.lat+', '+loc.lng:''}" aria-label="좌표"><button type="button" class="btn small" id="fPick">지도에서 찍기</button></div>
       <span class="st ${loc?'ok':''}" id="fLocSt">${loc?'위치 지정됨':'위치를 넣으면 지도·이동거리·길찾기에 쓰여요.'}</span>
-      <div class="grid2"><div class="f"><label for="x_addr">주소</label><input id="x_addr" data-k="addr" value="${esc((d.det||{}).addr||'')}"></div><div class="f"><label for="x_phone">연락처</label><input id="x_phone" data-k="phone" value="${esc((d.det||{}).phone||'')}"></div></div>
+      <div class="grid2"><div class="f"><label for="x_addr">주소</label><div style="display:flex;gap:6px"><input id="x_addr" data-k="addr" style="flex:1;min-width:0" value="${esc((d.det||{}).addr||'')}"><button type="button" class="btn small" id="fAddrGo" title="이 주소로 지도에 표시">📍 지도에</button></div><span class="hint" id="fAddrSt">저장하면 이 주소로 위치를 자동으로 찾아요.</span></div><div class="f"><label for="x_phone">연락처</label><input id="x_phone" data-k="phone" value="${esc((d.det||{}).phone||'')}"></div></div>
     </div></details>
     <details class="more" id="dVia" ${via.mode?'open':''}><summary>여기로 오는 방법 <span class="hint" id="fFrom"></span></summary><div class="inner">
       <div class="catpick" id="fMode"><button type="button" data-m="" aria-pressed="${!via.mode}">안 정함</button>${Object.entries(MODES).map(([k,m])=>`<button type="button" data-m="${k}" aria-pressed="${via.mode===k}">${m.label}</button>`).join('')}</div>
@@ -1677,6 +1713,8 @@ function openForm(item,keep){
       }catch(e2){locSt('위치를 찾지 못했어요. 구글 지도에서 장소를 우클릭해 좌표를 복사해 붙여넣거나 "지도에서 찍기"를 쓰세요.')}
     }
   }
+  if($('#fAddrGo'))$('#fAddrGo').onclick=async()=>{const a=$('#x_addr').value.trim(),st=$('#fAddrSt');if(!a){st.textContent='주소를 먼저 적어 주세요.';return}
+    st.textContent='주소로 위치를 찾는 중…';try{const p=await geoFind({...gather(),lat:undefined,lng:undefined});if(p){setLoc(p,'주소로 위치를 찾았어요');st.textContent='찾았어요! 지도에 표시돼요.'}else st.textContent='이 주소를 찾지 못했어요. 영어·현지어 주소나 장소 이름으로 써 보세요.'}catch(e){st.textContent='여기서는 주소 검색이 막혀 있어요. 웹사이트 주소로 열어 주세요.'}};
   $('#fSearch').onclick=()=>search($('#fQuery').value||$('#fPlace').value);
   $('#fQuery').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();search(e.target.value)}};
   $('#vAsk').onclick=async()=>{
@@ -1705,15 +1743,19 @@ function openForm(item,keep){
   $('#fPick').onclick=()=>{picking=gather();closeForm.cleanup=null;closeForm();$('#pickBanner').hidden=false;document.body.classList.add('picking');$('#map').scrollIntoView({behavior:'smooth',block:'center'})};
   $('#fCancel').onclick=closeForm;
   if($('#fDel')){const b=$('#fDel');b.onclick=()=>{if(b.dataset.armed){trip.items=trip.items.filter(i=>i.id!==d.id);if(selId===d.id)selId=null;save();closeForm.cleanup=null;tix.files.forEach(f=>fdel(f.id));(tixOf(d).files||[]).forEach(f=>fdel(f.id));closeForm();render(false);toast('삭제했어요')}else{b.dataset.armed=1;b.textContent='한 번 더 누르면 삭제'}}}
-  $('#fItem').onsubmit=e=>{e.preventDefault();const it=gather();
+  $('#fItem').onsubmit=async e=>{e.preventDefault();const it=gather();
     if(!it.cat){toast('종류를 골라 주세요');return}
     if(!it.place){$('#fPlace').focus();$('#fPlace').placeholder='장소나 할 일을 적어 주세요';return}
     if(it.cat==='stay'&&it.det.outDate&&it.date&&it.det.outDate<it.date){toast('체크아웃이 체크인보다 빨라요');return}
     if(it.start&&it.end&&it.end<it.start){toast('끝 시간이 시작보다 빨라요. 밤을 넘기면 다음 날로 나눠 주세요');$('#fEnd').focus();return}
     if(!hasLoc(it)){delete it.lat;delete it.lng}
+    let geoMsg='';const addrChanged=((it.det||{}).addr||'').trim()&&((it.det||{}).addr||'').trim()!==(((d.det||{}).addr)||'').trim()&&hasLoc(it)&&hasLoc(d)&&it.lat===d.lat&&it.lng===d.lng;
+    if((!hasLoc(it)&&geoQueries(it).length&&(((it.det||{}).addr||'').trim()||it.cat!=='move'))||addrChanged){const sb=$('#fItem').querySelector('button[type=submit]');if(sb){sb.disabled=true;sb.textContent='위치 찾는 중…'}
+      try{const p=await geoFind({...it,lat:undefined,lng:undefined});if(p){it.lat=p.lat;it.lng=p.lng;geoMsg=' · 주소로 지도에 표시했어요'}else if(!hasLoc(it))geoMsg=' · 위치는 못 찾았어요(주소를 자세히)'}catch(err){}
+      if(sb){sb.disabled=false}}
     const idx=trip.items.findIndex(i=>i.id===it.id);if(idx>=0)trip.items[idx]=it;else trip.items.push(it);
     const keepIds=new Set(it.tix.files.map(f=>f.id));origFiles.forEach(id=>{if(!keepIds.has(id))fdel(id)});closeForm.cleanup=null;
-    trip.isSample=false;save();closeForm();render(false);if(hasLoc(it)&&it.date)focusItem(it.id);toast(!it.date?'장소 모음에 저장했어요':(idx>=0?'저장했어요':'일정에 추가했어요'))};
+    trip.isSample=false;save();closeForm();render(false);if(hasLoc(it)&&it.date)focusItem(it.id);toast((!it.date?'장소 모음에 저장했어요':(idx>=0?'저장했어요':'일정에 추가했어요'))+geoMsg)};
   setTimeout(()=>{if(!keep&&cat)$('#fPlace').focus()},30);
 }
 function closeForm(){$('#overlay').hidden=true;$('#overlay').innerHTML='';releaseWake();if(closeForm.cleanup){const f=closeForm.cleanup;closeForm.cleanup=null;f()}}
@@ -1785,6 +1827,7 @@ $('#bTrips').onclick=openTrips;
 let folded=window.matchMedia('(max-width:900px)').matches;try{const f=localStorage.getItem('tripPlanner.fold');if(f!==null)folded=f==='1'}catch(e){}
 function setFold(v){folded=v;$('#rightPane').classList.toggle('folded',v);$('#bFold').textContent=v?'지도 펼치기':'지도 접기';try{localStorage.setItem('tripPlanner.fold',v?'1':'0')}catch(e){}if(!v&&map)setTimeout(()=>{map.invalidateSize();renderMap()},50)}
 setFold(folded);$('#bFold').onclick=()=>setFold(!folded);
+$('#bGeo').onclick=geoAll;
 $('#bTiles').onclick=()=>{if(!map)return;tileIdx=(tileIdx+1)%TILES.length;try{localStorage.setItem('tripPlanner.tiles',tileIdx)}catch(e){};noteClosed=false;addTiles();toast(TILES[tileIdx].name+'로 바꿨어요')};
 importSharedFiles();
 $('#bClearRecs').onclick=()=>{recs=[];renderRecMarkers();drawRecCards();renderMap(false)};
