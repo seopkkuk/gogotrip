@@ -556,6 +556,16 @@ function toFB(t){const meta={};['title','start','end','people','budget','currenc
   return {meta,items:asObj(t.items),todos:asObj(t.todos),cities:asObj(t.cities),expenses:asObj(t.expenses),dayNotes:JSON.parse(JSON.stringify(t.dayNotes||{}))}}
 function fromFB(d){d=d||{};const m=d.meta||{};const t={title:'여행',start:'',end:'',people:1,budget:0,currency:'KRW',rates:{},...m,items:Object.values(d.items||{}),todos:Object.values(d.todos||{}),cities:Object.values(d.cities||{}),expenses:Object.values(d.expenses||{}),dayNotes:d.dayNotes||{},isSample:false};
   t.items.forEach(i=>{if(i.tix){i.tix.links=i.tix.links||[];i.tix.files=i.tix.files||[]}if(!i.det)i.det={}});return migrate(t)}
+const jeq=(a,b)=>JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);
+function merge3(base,mine,theirs){ // 내가 바꾼 칸만 내 것으로, 나머지는 최신 것으로
+  if(!theirs||typeof theirs!=='object'||Array.isArray(theirs))return mine;if(!base||typeof base!=='object')return mine;
+  const out={...theirs};
+  new Set([...Object.keys(mine||{}),...Object.keys(base)]).forEach(k=>{
+    const m=(mine||{})[k],b=base[k],t=theirs[k];
+    if(jeq(m,b))return;
+    if(k==='det'&&m&&typeof m==='object'&&!Array.isArray(m)){out[k]=merge3(b||{},m,t||{});return}
+    if(m===undefined)delete out[k];else out[k]=m});
+  return out}
 function fbKeys(fb){const o={meta:JSON.stringify(fb.meta||{}),dayNotes:JSON.stringify(fb.dayNotes||{})};['items','todos','cities','expenses'].forEach(c=>Object.entries(fb[c]||{}).forEach(([id,v])=>o[c+'/'+id]=JSON.stringify(v)));return o}
 function fbFromKeys(k){const o={meta:{},items:{},todos:{},cities:{},expenses:{},dayNotes:{}};Object.entries(k).forEach(([p,v])=>{if(v===undefined)return;const val=JSON.parse(v);if(p==='meta'||p==='dayNotes')o[p]=val;else{const [c,id]=p.split('/');o[c][id]=val}});return o}
 function fbPush(){fbChain=fbChain.then(async()=>{
@@ -572,7 +582,10 @@ async function fbPull(){
     const rem=fbKeys(d),wasLoading=trip._loading;
     if(!fbLast||wasLoading){trip=fromFB(d);fbLast=rem;localSave();fbState='ok';render();return}
     const loc=fbKeys(toFB(trip)),merged={};
-    new Set([...Object.keys(rem),...Object.keys(loc),...Object.keys(fbLast)]).forEach(k=>{merged[k]=(loc[k]!==fbLast[k])?loc[k]:rem[k]});
+    new Set([...Object.keys(rem),...Object.keys(loc),...Object.keys(fbLast)]).forEach(k=>{
+      if(loc[k]===fbLast[k]){merged[k]=rem[k];return}
+      if(rem[k]!==fbLast[k]&&loc[k]!==undefined&&rem[k]!==undefined&&fbLast[k]!==undefined&&k!=='dayNotes'){try{merged[k]=JSON.stringify(merge3(JSON.parse(fbLast[k]),JSON.parse(loc[k]),JSON.parse(rem[k])));return}catch(e){}}
+      merged[k]=loc[k]});
     const before=JSON.stringify(loc);trip=fromFB(fbFromKeys(merged));fbLast=rem;localSave();
     if(JSON.stringify(fbKeys(toFB(trip)))!==before){if(typing())fbDeferred=true;else render(false)}
     if(fbState==='off')fbState='ok';renderCloud();
@@ -1555,6 +1568,7 @@ function setView(v){view=v;try{localStorage.setItem(KEY+'.view',v)}catch(e){};re
 
 /* item form */
 function openForm(item,keep){
+  let base=item._base||JSON.parse(JSON.stringify(item));delete item._base;
   const days=dayList(),isNew=!trip.items.some(i=>i.id===item.id),d=item;
   let cat=d.cat||'',loc=hasLoc(d)?{lat:d.lat,lng:d.lng}:null;
   const via=d.via?{...d.via}:{mode:'',line:'',mins:'',cost:'',cur:defaultCur(d.date)};
@@ -1590,12 +1604,13 @@ function openForm(item,keep){
       <div class="f"><label for="x_resno">예약번호</label><input id="x_resno" data-k="resno" value="${esc((d.det||{}).resno||'')}"></div>
       <div id="fTix" style="display:flex;flex-direction:column;gap:12px"></div>
     </div></details>
-    <details class="more" id="dLoc" ${!loc&&!isNew?'':''}><summary>위치 · 연락처 <span class="hint" id="fLocSum">${loc?'위치 있음':'위치 없음'}</span></summary><div class="inner">
+    <details class="more" id="dLoc" ${(d.det||{}).addr||(d.det||{}).phone?'open':''}><summary>위치 · 연락처 <span class="hint" id="fLocSum">${loc?'위치 있음':'위치 없음'}</span></summary><div class="inner">
       <div class="loc-row"><input class="inp" id="fQuery" placeholder="장소 이름으로 검색 (해외도 가능)" aria-label="장소 검색"><button type="button" class="btn small" id="fSearch">검색</button></div>
       <div class="results" id="fResults"></div>
       <div class="loc-row"><input class="inp" id="fCoord" placeholder="좌표나 구글 지도 링크 붙여넣기" value="${loc?loc.lat+', '+loc.lng:''}" aria-label="좌표"><button type="button" class="btn small" id="fPick">지도에서 찍기</button></div>
       <span class="st ${loc?'ok':''}" id="fLocSt">${loc?'위치 지정됨':'위치를 넣으면 지도·이동거리·길찾기에 쓰여요.'}</span>
-      <div class="grid2"><div class="f"><label for="x_addr">주소</label><div style="display:flex;gap:6px"><input id="x_addr" data-k="addr" style="flex:1;min-width:0" value="${esc((d.det||{}).addr||'')}"><button type="button" class="btn small" id="fAddrGo" title="이 주소로 지도에 표시">📍 지도에</button></div><span class="hint" id="fAddrSt">저장하면 이 주소로 위치를 자동으로 찾아요.</span></div><div class="f"><label for="x_phone">연락처</label><input id="x_phone" data-k="phone" value="${esc((d.det||{}).phone||'')}"></div></div>
+      <div style="display:flex;flex-direction:column;gap:12px"><div class="f"><label for="x_addr">주소</label><div style="display:flex;gap:6px"><input id="x_addr" data-k="addr" style="flex:1;min-width:0" placeholder="예: Via Nazionale 7, Roma" value="${esc((d.det||{}).addr||'')}"><button type="button" class="btn small" id="fAddrGo" title="이 주소로 지도에 표시">📍 지도에</button></div><span class="hint" id="fAddrSt">저장하면 이 주소로 위치를 자동으로 찾아요.</span></div><div class="f"><label for="x_phone">연락처</label><input id="x_phone" data-k="phone" value="${esc((d.det||{}).phone||'')}"></div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small primary" id="fAddrSave">💾 주소 · 연락처 저장</button><span class="hint">창을 닫지 않고 바로 저장돼요.</span></div>
     </div></details>
     <details class="more" id="dVia" ${via.mode?'open':''}><summary>여기로 오는 방법 <span class="hint" id="fFrom"></span></summary><div class="inner">
       <div class="catpick" id="fMode"><button type="button" data-m="" aria-pressed="${!via.mode}">안 정함</button>${Object.entries(MODES).map(([k,m])=>`<button type="button" data-m="${k}" aria-pressed="${via.mode===k}">${m.label}</button>`).join('')}</div>
@@ -1733,6 +1748,8 @@ function openForm(item,keep){
     finally{$('#vAsk').disabled=false}
   };
   const gather=()=>{
+    $('#fItem').querySelectorAll('input[data-k]').forEach(x=>{det[x.dataset.k]=(x.value||'').trim()});
+    const qv=($('#fQuery')&&$('#fQuery').value||'').trim();if(qv&&!det.addr&&!loc&&qv!==$('#fPlace').value.trim())det.addr=qv;
     const v={mode:via.mode,line:$('#vLine').value.trim(),mins:numIn($('#vMins').value)||''};
     return {...d,place:$('#fPlace').value.trim(),date:$('#fDate').value,start:$('#fStart').value,end:$('#fEnd').value,cat,
       unit:numIn($('#fUnit').value),pax:Math.max(1,parseInt($('#fPax').value)||1),cost:numIn($('#fUnit').value)*Math.max(1,parseInt($('#fPax').value)||1),cur:$('#fCur').value,memo:$('#fMemo').value.trim(),lat:loc?loc.lat:undefined,lng:loc?loc.lng:undefined,
@@ -1740,9 +1757,19 @@ function openForm(item,keep){
       cityId:$('#fDate').value?(d.cityId||''):$('#fCity').value,
       tix:{links:tix.links.filter(l=>l.url),files:tix.files,holder:tix.holder,count:tix.count}};
   };
-  $('#fPick').onclick=()=>{picking=gather();closeForm.cleanup=null;closeForm();$('#pickBanner').hidden=false;document.body.classList.add('picking');$('#map').scrollIntoView({behavior:'smooth',block:'center'})};
+  $('#fPick').onclick=()=>{picking=gather();picking._base=base;closeForm.cleanup=null;closeForm();$('#pickBanner').hidden=false;document.body.classList.add('picking');$('#map').scrollIntoView({behavior:'smooth',block:'center'})};
   $('#fCancel').onclick=closeForm;
   if($('#fDel')){const b=$('#fDel');b.onclick=()=>{if(b.dataset.armed){trip.items=trip.items.filter(i=>i.id!==d.id);if(selId===d.id)selId=null;save();closeForm.cleanup=null;tix.files.forEach(f=>fdel(f.id));(tixOf(d).files||[]).forEach(f=>fdel(f.id));closeForm();render(false);toast('삭제했어요')}else{b.dataset.armed=1;b.textContent='한 번 더 누르면 삭제'}}}
+  function upsert(it){const idx=trip.items.findIndex(i=>i.id===it.id);
+    if(idx>=0){const m=merge3(base,it,trip.items[idx]);trip.items[idx]=m;Object.assign(it,m)}else trip.items.push(it);
+    base=JSON.parse(JSON.stringify(it));return idx}
+  $('#fAddrSave').onclick=async()=>{const it=gather(),st=$('#fAddrSt');
+    if(!it.cat||!it.place){st.textContent='장소 이름을 먼저 적어 주세요.';return}
+    const a=(it.det.addr||'').trim();if(!hasLoc(it))delete it.lat,delete it.lng;
+    if(a&&a!==((base.det||{}).addr||'')){st.textContent='저장하고 위치 찾는 중…';try{const p=await geoFind({...it,lat:undefined,lng:undefined});if(p){it.lat=p.lat;it.lng=p.lng;setLoc(p,'주소로 위치를 찾았어요')}}catch(e){}}
+    const idx=upsert(it);closeForm.cleanup=null;trip.isSample=false;save();render(false);
+    st.textContent=a?`저장했어요 ✓ ${hasLoc(it)?'지도에도 표시돼요.':'(위치는 못 찾았어요)'}`:'저장했어요 ✓';st.style.color='var(--ok,#1a7f4b)';
+    toast(idx>=0?'주소 · 연락처를 저장했어요':'일정에 추가했어요 (창은 열어 둘게요)')};
   $('#fItem').onsubmit=async e=>{e.preventDefault();const it=gather();
     if(!it.cat){toast('종류를 골라 주세요');return}
     if(!it.place){$('#fPlace').focus();$('#fPlace').placeholder='장소나 할 일을 적어 주세요';return}
@@ -1753,7 +1780,7 @@ function openForm(item,keep){
     if((!hasLoc(it)&&geoQueries(it).length&&(((it.det||{}).addr||'').trim()||it.cat!=='move'))||addrChanged){const sb=$('#fItem').querySelector('button[type=submit]');if(sb){sb.disabled=true;sb.textContent='위치 찾는 중…'}
       try{const p=await geoFind({...it,lat:undefined,lng:undefined});if(p){it.lat=p.lat;it.lng=p.lng;geoMsg=' · 주소로 지도에 표시했어요'}else if(!hasLoc(it))geoMsg=' · 위치는 못 찾았어요(주소를 자세히)'}catch(err){}
       if(sb){sb.disabled=false}}
-    const idx=trip.items.findIndex(i=>i.id===it.id);if(idx>=0)trip.items[idx]=it;else trip.items.push(it);
+    const idx=upsert(it);
     const keepIds=new Set(it.tix.files.map(f=>f.id));origFiles.forEach(id=>{if(!keepIds.has(id))fdel(id)});closeForm.cleanup=null;
     trip.isSample=false;save();closeForm();render(false);if(hasLoc(it)&&it.date)focusItem(it.id);toast((!it.date?'장소 모음에 저장했어요':(idx>=0?'저장했어요':'일정에 추가했어요'))+geoMsg)};
   setTimeout(()=>{if(!keep&&cat)$('#fPlace').focus()},30);
