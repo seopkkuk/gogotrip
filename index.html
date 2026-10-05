@@ -946,24 +946,30 @@ function bindPig(){
 function renderBudget(){
   const el=$('#vBudget'),days=dayList();
   if(!trip.items.length&&!(trip.expenses||[]).length){el.innerHTML=pigHtml()+emptyHtml();bindPig();return}
-  const total=sched().reduce((s,i)=>s+itemKRW(i),0);
-  const catSum=k=>sched().reduce((s,i)=>s+((i.cat||'etc')===k?krw(i.cost,i.cur):0)+(k==='move'&&i.via?krw(i.via.cost,i.via.cur):0),0);
+  const xs=(trip.expenses||[]).filter(x=>+x.amount),xK=x=>krw(x.amount,x.cur),xTot=xs.reduce((s,x)=>s+xK(x),0);
+  const itTot=sched().reduce((s,i)=>s+itemKRW(i),0),total=itTot+xTot;
+  const catSum=k=>sched().reduce((s,i)=>s+((i.cat||'etc')===k?krw(i.cost,i.cur):0)+(k==='move'&&i.via?krw(i.via.cost,i.via.cur):0),0)+xs.reduce((s,x)=>s+(((CATS[x.cat]?x.cat:'etc'))===k?xK(x):0),0);
   const byCat=Object.keys(CATS).map(k=>({k,v:catSum(k)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v),maxC=Math.max(1,...byCat.map(x=>x.v));
-  const byDay=days.map((d,i)=>({d,i,v:itemsOf(d).reduce((s,x)=>s+itemKRW(x),0)})),maxD=Math.max(1,...byDay.map(x=>x.v));
-  const top=sched().filter(i=>krw(i.cost,i.cur)>0).sort((a,b)=>krw(b.cost,b.cur)-krw(a.cost,a.cur)).slice(0,6);
-  const byCur={};trip.items.forEach(i=>{if(+i.cost)byCur[i.cur]=(byCur[i.cur]||0)+(+i.cost);if(i.via&&+i.via.cost)byCur[i.via.cur]=(byCur[i.via.cur]||0)+(+i.via.cost)});
+  const xOn=d=>xs.filter(x=>x.date===d).reduce((s,x)=>s+xK(x),0);
+  const byDay=days.map((d,i)=>({d,i,v:itemsOf(d).reduce((s,x)=>s+itemKRW(x),0)+xOn(d)}));
+  const xBefore=xs.filter(x=>!x.date||(trip.start&&x.date<trip.start)).reduce((s,x)=>s+xK(x),0),xAfter=xs.filter(x=>x.date&&trip.end&&x.date>trip.end).reduce((s,x)=>s+xK(x),0);
+  const maxD=Math.max(1,xBefore,xAfter,...byDay.map(x=>x.v));
+  const top=[...sched().filter(i=>krw(i.cost,i.cur)>0).map(i=>({name:i.place,v:krw(i.cost,i.cur),x:false})),...xs.map(x=>({name:x.label||'즉석 지출',v:xK(x),x:true}))].sort((a,b)=>b.v-a.v).slice(0,8);
+  const byCur={};sched().forEach(i=>{if(+i.cost)byCur[i.cur]=(byCur[i.cur]||0)+(+i.cost);if(i.via&&+i.via.cost)byCur[i.via.cur]=(byCur[i.via.cur]||0)+(+i.via.cost)});xs.forEach(x=>{byCur[x.cur||'KRW']=(byCur[x.cur||'KRW']||0)+(+x.amount)});
   const b=+trip.budget||0;
   el.innerHTML=pigHtml()+`<div class="budget">
     <div class="panel"><h3>항목별 (원화)</h3>${byCat.map(x=>`<div class="bar-row"><span><i class="dot" style="background:var(${CATS[x.k].v})"></i> ${CATS[x.k].label}</span><div class="bar"><i style="width:${x.v/maxC*100}%;background:var(${CATS[x.k].v})"></i></div><span class="n">${won(x.v)}</span></div>`).join('')||'<span class="hint">금액이 들어간 일정이 없어요</span>'}
       ${total?`<span class="hint">비중: ${byCat.map(x=>`${CATS[x.k].label} ${(x.v/total*100).toFixed(0)}%`).join(' · ')}</span>`:''}</div>
-    <div class="panel"><h3>날짜별</h3>${byDay.map(x=>`<div class="bar-row"><span>${x.i+1}일차 <span class="hint">${fmtD(x.d).split(' ')[0]}</span></span><div class="bar"><i style="width:${x.v/maxD*100}%;background:${dayColor(x.i)}"></i></div><span class="n">${won(x.v)}</span></div>`).join('')}
+    <div class="panel"><h3>날짜별</h3>${xBefore?`<div class="bar-row"><span>여행 전 <span class="hint">준비</span></span><div class="bar"><i style="width:${xBefore/maxD*100}%;background:#8a99a1"></i></div><span class="n">${won(xBefore)}</span></div>`:''}${byDay.map(x=>`<div class="bar-row"><span>${x.i+1}일차 <span class="hint">${fmtD(x.d).split(' ')[0]}</span></span><div class="bar"><i style="width:${x.v/maxD*100}%;background:${dayColor(x.i)}"></i></div><span class="n">${won(x.v)}</span></div>`).join('')}${xAfter?`<div class="bar-row"><span>여행 후</span><div class="bar"><i style="width:${xAfter/maxD*100}%;background:#8a99a1"></i></div><span class="n">${won(xAfter)}</span></div>`:''}
       ${b&&days.length?`<span class="hint">예산을 하루로 나누면 ${won(b/days.length)}</span>`:''}</div>
-    ${cities().length?(()=>{const rows=cities().map(c=>({c,v:sched().filter(i=>cityOf(i)===c).reduce((s,i)=>s+itemKRW(i),0)}));const none=sched().filter(i=>!cityOf(i)).reduce((s,i)=>s+itemKRW(i),0);const mx=Math.max(1,none,...rows.map(r=>r.v));
-      return `<div class="panel"><h3>도시별</h3>${rows.map(r=>`<div class="bar-row"><span>${esc(r.c.name)}</span><div class="bar"><i style="width:${r.v/mx*100}%;background:${cityColor(r.c)}"></i></div><span class="n">${won(r.v)}</span></div>`).join('')}${none?`<div class="bar-row"><span class="hint">도시 밖</span><div class="bar"><i style="width:${none/mx*100}%;background:#8a99a1"></i></div><span class="n">${won(none)}</span></div>`:''}<span class="hint">도시는 위치(250km 안)와 날짜로 정해요. 귀국 항공편처럼 어느 도시에도 속하지 않으면 "도시 밖"으로 따로 모아요.</span></div>`})():''}
+    ${cities().length?(()=>{const xc=x=>x.date&&x.date>=trip.start&&x.date<=trip.end?(citiesOn(x.date)[0]||null):null;
+      const rows=cities().map(c=>({c,v:sched().filter(i=>cityOf(i)===c).reduce((s,i)=>s+itemKRW(i),0)+xs.filter(x=>xc(x)===c).reduce((s,x)=>s+xK(x),0)}));const none=sched().filter(i=>!cityOf(i)).reduce((s,i)=>s+itemKRW(i),0)+xs.filter(x=>!xc(x)).reduce((s,x)=>s+xK(x),0);const mx=Math.max(1,none,...rows.map(r=>r.v));
+      return `<div class="panel"><h3>도시별</h3>${rows.map(r=>`<div class="bar-row"><span>${esc(r.c.name)}</span><div class="bar"><i style="width:${r.v/mx*100}%;background:${cityColor(r.c)}"></i></div><span class="n">${won(r.v)}</span></div>`).join('')}${none?`<div class="bar-row"><span class="hint">도시 밖 · 여행 전</span><div class="bar"><i style="width:${none/mx*100}%;background:#8a99a1"></i></div><span class="n">${won(none)}</span></div>`:''}<span class="hint">도시는 위치(250km 안)와 날짜로 정해요. 귀국 항공편처럼 어느 도시에도 속하지 않으면 "도시 밖"으로 따로 모아요.</span></div>`})():''}
     <div class="panel"><h3>통화별로 준비할 돈</h3><ul class="kv">${Object.entries(byCur).map(([c,v])=>`<li><span>${esc(CURS[c]||c)}</span><span class="mono">${money(v,c)}${c!=='KRW'?` <span class="hint">${rateOf(c)?'≈ '+won(v*rateOf(c)):'환율 없음'}</span>`:''}</span></li>`).join('')}</ul></div>
-    <div class="panel"><h3>큰 지출</h3><ul class="kv">${top.map(i=>`<li><span>${esc(i.place)}</span><span class="mono">${won(krw(i.cost,i.cur))}</span></li>`).join('')}</ul></div>
+    <div class="panel"><h3>큰 지출</h3><ul class="kv">${top.map(t=>`<li><span>${esc(t.name)}${t.x?' <span class="hint">즉석</span>':''}</span><span class="mono">${won(t.v)}</span></li>`).join('')}</ul></div>
     <div class="panel"><h3>정산</h3><ul class="kv">
         <li><span>총 비용</span><span class="mono">${won(total)}</span></li>
+        ${xTot?`<li><span class="hint">ㄴ 일정 ${won(itTot)} + 즉석 지출 ${won(xTot)}</span><span></span></li>`:''}
         <li><span>예산</span><span class="mono">${b?won(b):'–'}</span></li>
         <li><span>${b&&total>b?'초과':'남은 돈'}</span><span class="mono" style="color:${b&&total>b?'var(--warn)':'var(--good)'}">${b?won(Math.abs(b-total)):'–'}</span></li>
         <li><span>1인당 (${trip.people||1}명)</span><span class="mono">${won(total/(trip.people||1))}</span></li></ul></div>
