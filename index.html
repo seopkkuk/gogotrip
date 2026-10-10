@@ -200,7 +200,7 @@ h1{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);line-height:1.2;m
 .spend .tx b{font-size:14.5px;font-weight:600}
 .donebtn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);border-radius:8px;padding:5px 10px;font-size:12.5px;font-weight:700;white-space:nowrap}
 .undobtn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;padding:4px 9px;font-size:12px;font-weight:600;white-space:nowrap}
-.xadd{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto auto auto;gap:6px}
+.xadd{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto auto auto auto;gap:6px}
 @media (max-width:620px){.xadd{grid-template-columns:1fr 1fr}.xadd input:first-child,.xadd button{grid-column:1/-1}}
 .xadd input,.xadd select{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px;min-width:0}
 @media (prefers-reduced-motion:reduce){.coinfx{display:none}}
@@ -886,7 +886,7 @@ const xSum=()=>(trip.expenses||[]).reduce((s,x)=>s+krw(x.amount,x.cur),0);
 const DONE_LABEL={move:'탑승 완료',stay:'체크인 완료',food:'먹었어요',cafe:'먹었어요',see:'관광 완료',tour:'투어 완료',shop:'구매 완료',night:'다녀왔어요',spa:'이용 완료',etc:'완료'};
 const spentItems=()=>sched().filter(i=>i.pay==='paid'&&itemKRW(i)>0);
 const spentNow=()=>spentItems().reduce((s,i)=>s+itemKRW(i),0)+xSum();
-let pigPrev=null;
+let pigPrev=null,xLastDate='';
 function pigSvg(ratio,over){
   const r=Math.max(0,Math.min(1,ratio)),top=38,h=124,y=top+(1-r)*h;
   const coins=[];for(let row=0;row<9;row++)for(let col=0;col<9;col++){const cx=48+col*19+(row%2?9:0),cy=150-row*14;if(cy>=y-4)coins.push(`<circle cx="${cx}" cy="${cy}" r="8" fill="var(--coin)" stroke="var(--coin-edge)" stroke-width="1.5"/>`)}
@@ -928,7 +928,7 @@ function pigHtml(){
       ${b&&left<0?'<b style="color:var(--warn)">저금통이 텅 비었어요! 예산을 넘었어요.</b>':''}
       <div class="pigbudget"><label for="pigB" class="flabel">전체 예산</label><input id="pigB" inputmode="numeric" value="${b?fmtIn(b):''}" placeholder="예: 3,000,000"><span>원</span><button type="button" class="btn small primary" id="pigSet">넣기</button></div></div></div>
   <div class="panel" style="margin-bottom:14px"><h3>즉석 지출 넣기 <span class="hint" style="font-weight:500">일정에 없는 길거리 간식, 기념품, 택시 등</span></h3>
-    <div class="xadd"><input id="xLabel" placeholder="예: 젤라또 2개" aria-label="내용"><input id="xAmt" inputmode="decimal" placeholder="금액" aria-label="금액"><select id="xCur" aria-label="통화">${curOptions(dc)}</select><select id="xCat" aria-label="분류">${Object.entries(CATS).filter(([k])=>k!=='stay').map(([k,c])=>`<option value="${k}" ${k==='food'?'selected':''}>${c.label}</option>`).join('')}</select><button type="button" class="btn primary small" id="xAdd">빼기</button></div></div>
+    <div class="xadd"><input id="xLabel" placeholder="예: 젤라또 2개" aria-label="내용"><input id="xAmt" inputmode="decimal" placeholder="금액" aria-label="금액"><select id="xCur" aria-label="통화">${curOptions(dc)}</select><input type="date" id="xDate" aria-label="쓴 날짜" title="쓴 날짜" value="${xLastDate||today}"><select id="xCat" aria-label="분류">${Object.entries(CATS).filter(([k])=>k!=='stay').map(([k,c])=>`<option value="${k}" ${k==='food'?'selected':''}>${c.label}</option>`).join('')}</select><button type="button" class="btn primary small" id="xAdd">빼기</button></div><span class="hint" id="xDayHint" style="display:block;margin-top:6px">${(()=>{const xd=xLastDate||today,i=dayList().indexOf(xd);return i>=0?`${i+1}일차에 들어가요`:(trip.start&&xd<trip.start?'여행 전 준비로 들어가요. 날짜를 바꾸면 그날로 들어가요':'날짜를 바꾸면 그날로 들어가요')})()}</span></div>
   <div class="td-group"><span>쓸 예정 <span class="hint" style="font-weight:500">다 하면 버튼을 눌러요. 저금통에서 돈이 빠져요</span></span><span class="mono hint">${won(todo.reduce((s,i)=>s+itemKRW(i),0))}</span></div>
   ${todo.length?`<div class="td-list">${todo.map(i=>`<div class="spend"><div class="tx"><b>${esc(i.place)}</b><span class="hint">${fmtD(i.date)} ${esc(i.start||'')} · ${(CATS[i.cat]||CATS.etc).label}${i.pay==='onsite'?' · 현장 결제':''}</span></div><span class="mono">${won(itemKRW(i))}</span><button type="button" class="donebtn" data-pigdone="${i.id}">${i.resv==='need'?'예약·결제 완료':(DONE_LABEL[i.cat]||'완료')}</button></div>`).join('')}</div>`:'<div class="hint" style="padding:8px 2px">쓸 예정인 돈이 없어요.</div>'}
   <div class="td-group"><span>이미 쓴 돈</span><span class="mono hint">${won(spent)}</span></div>
@@ -940,8 +940,10 @@ function bindPig(){
   if($('#pigSet'))$('#pigSet').onclick=()=>{trip.budget=numIn($('#pigB').value);save();pigPrev=null;renderBudget();renderHead();toast('예산을 넣었어요')};
   if($('#pigB'))$('#pigB').oninput=e=>e.target.value=fmtIn(e.target.value);
   if($('#xAmt'))$('#xAmt').oninput=e=>e.target.value=fmtIn(e.target.value);
+  if($('#xCur'))$('#xCur').onchange=()=>{$('#xCur').dataset.touched=1};
+  if($('#xDate'))$('#xDate').onchange=()=>{const d=$('#xDate').value;if(d&&!$('#xCur').dataset.touched){const c=defaultCur(d);if([...$('#xCur').options].some(o=>o.value===c))$('#xCur').value=c}const st=$('#xDayHint');if(st){const i=dayList().indexOf(d);st.textContent=i>=0?`${i+1}일차에 들어가요`:(d&&trip.start&&d<trip.start?'여행 전 준비로 들어가요':d&&trip.end&&d>trip.end?'여행 후로 들어가요':'')}};
   if($('#xAdd'))$('#xAdd').onclick=()=>{const a=numIn($('#xAmt').value);if(!a){$('#xAmt').focus();return}
-    trip.expenses=trip.expenses||[];trip.expenses.push({id:uid(),label:$('#xLabel').value.trim()||'즉석 지출',amount:a,cur:$('#xCur').value,cat:$('#xCat').value,date:iso(new Date())});save();renderBudget();renderHead()};
+    trip.expenses=trip.expenses||[];trip.expenses.push({id:uid(),label:$('#xLabel').value.trim()||'즉석 지출',amount:a,cur:$('#xCur').value,cat:$('#xCat').value,date:$('#xDate').value||iso(new Date())});xLastDate=$('#xDate').value;save();renderBudget();renderHead();const di=dayList().indexOf(xLastDate);toast(di>=0?`${di+1}일차 지출로 넣었어요`:'지출을 넣었어요')};
 }
 function renderBudget(){
   const el=$('#vBudget'),days=dayList();
